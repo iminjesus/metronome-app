@@ -19,7 +19,7 @@
       <span class="bpm-value" id="bpmValue">120</span>
       <span class="bpm-label">BPM</span>
     </div>
-    <div class="tempo-name" id="tempoName">Allegro</div>
+    <div class="tempo-name" id="tempoName">Moderato</div>
 
     <!-- BPM slider -->
     <input
@@ -63,6 +63,54 @@
     </div>
 
     <p class="hint">Press <kbd>Space</kbd> to start/stop · <kbd>T</kbd> to tap</p>
+
+    <!-- ===== Speed Trainer ===== -->
+    <section class="panel" id="trainerPanel">
+      <button class="panel-head" id="trainerToggle" aria-expanded="true">
+        <span>🎯 Speed Trainer</span>
+        <span class="chevron">▾</span>
+      </button>
+
+      <div class="panel-body" id="trainerBody">
+        <p class="panel-desc">
+          Ramps the tempo up automatically — great for building speed.
+        </p>
+
+        <div class="field-grid">
+          <label class="field">
+            <span>Start BPM</span>
+            <input type="number" id="tStart" min="30" max="240" value="50" />
+          </label>
+          <label class="field">
+            <span>Target BPM</span>
+            <input type="number" id="tTarget" min="30" max="240" value="150" />
+          </label>
+          <label class="field">
+            <span>Step (BPM)</span>
+            <input type="number" id="tStep" min="1" max="60" value="10" />
+          </label>
+          <label class="field">
+            <span>Every (sec)</span>
+            <input type="number" id="tInterval" min="2" max="600" value="30" />
+          </label>
+        </div>
+
+        <!-- Voice options -->
+        <label class="switch-row">
+          <input type="checkbox" id="voiceOn" checked />
+          <span>Announce tempo by voice</span>
+        </label>
+
+        <label class="field field-wide">
+          <span>Voice / Language</span>
+          <select id="voiceSelect" aria-label="Voice language"></select>
+        </label>
+
+        <button id="trainerBtn" class="btn btn-primary btn-block">Start Trainer</button>
+
+        <div class="trainer-status" id="trainerStatus">Ready · 50 → 150 BPM</div>
+      </div>
+    </section>
   </main>
 
   <script src="app.js"></script>
