@@ -11,6 +11,28 @@ A simple, accurate metronome that runs entirely in the browser — no build step
 - **Visual beat indicator** synced to the audio
 - **Keyboard shortcuts** — `Space` to start/stop, `T` to tap
 - **Tempo markings** (Largo, Andante, Allegro, …) shown for the current BPM
+- **Speed Trainer** — ramps the tempo automatically (e.g. 50 → 150 BPM, +10 every 30s) and announces each change out loud; the spoken voice/language is chosen from any speech-synthesis voice installed in the browser
+- **Voice Control** — drive the metronome hands-free by speaking, in many languages. Manual controls keep working at the same time, so you can mix voice and touch freely.
+
+## Voice commands
+
+Open the **🎤 Voice Control** panel, pick a recognition language, and press
+**Start Listening**. Commands are matched loosely, in the selected language:
+
+| Say | Does |
+|-----|------|
+| "start" / "시작" | Play |
+| "stop" / "정지" | Stop |
+| "faster" / "빠르게" | +5 BPM |
+| "slower" / "느리게" | −5 BPM |
+| a number, e.g. "120" | Set the tempo |
+| "tap" | Tap tempo |
+| "trainer" | Start / stop the Speed Trainer |
+
+> Speech recognition uses the Web Speech API, which currently works in
+> **Chrome and Edge** (desktop). The first time, the browser asks for
+> microphone permission. Spoken numbers are recognized as digits; number
+> *words* in some languages may not parse — say or set them manually if so.
 
 ## Run it
 

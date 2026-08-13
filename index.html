@@ -111,6 +111,45 @@
         <div class="trainer-status" id="trainerStatus">Ready · 50 → 150 BPM</div>
       </div>
     </section>
+
+    <!-- ===== Voice Control (Speech Recognition) ===== -->
+    <section class="panel" id="voicePanel">
+      <button class="panel-head" id="voiceToggle" aria-expanded="true">
+        <span>🎤 Voice Control</span>
+        <span class="chevron">▾</span>
+      </button>
+
+      <div class="panel-body">
+        <p class="panel-desc">
+          Control the metronome by speaking — in the language you choose.
+        </p>
+
+        <label class="field field-wide">
+          <span>Recognition language</span>
+          <select id="vcLang" aria-label="Recognition language"></select>
+        </label>
+
+        <button id="micBtn" class="btn btn-primary btn-block">🎤 Start Listening</button>
+
+        <div class="trainer-status" id="vcHeard">Mic off</div>
+        <div class="vc-cmd" id="vcCmd" aria-live="polite"></div>
+
+        <details class="vc-help">
+          <summary>Example commands</summary>
+          <ul>
+            <li><b>Play / Stop</b> — “start”, “stop”</li>
+            <li><b>Set tempo</b> — say a number, e.g. “one hundred twenty”</li>
+            <li><b>Faster / Slower</b> — “faster”, “slower”</li>
+            <li><b>Tap</b> — “tap”</li>
+            <li><b>Trainer</b> — “trainer” (start / stop the ramp)</li>
+          </ul>
+          <p class="vc-langs">
+            Also understands Korean (시작·정지·빠르게·느리게), Japanese, Chinese,
+            Spanish, French, German, and more — just pick the language above.
+          </p>
+        </details>
+      </div>
+    </section>
   </main>
 
   <script src="app.js"></script>

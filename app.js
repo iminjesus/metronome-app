@@ -73,6 +73,13 @@ const el = {
   tInterval: document.getElementById("tInterval"),
   voiceOn: document.getElementById("voiceOn"),
   voiceSelect: document.getElementById("voiceSelect"),
+  // Voice Control (speech recognition)
+  voicePanel: document.getElementById("voicePanel"),
+  voiceToggle: document.getElementById("voiceToggle"),
+  micBtn: document.getElementById("micBtn"),
+  vcLang: document.getElementById("vcLang"),
+  vcHeard: document.getElementById("vcHeard"),
+  vcCmd: document.getElementById("vcCmd"),
 };
 
 // --- Audio ---
@@ -477,6 +484,227 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
+/* =========================================================================
+ * Voice Control — Speech Recognition (Web Speech API)
+ *
+ * Lets the user drive the metronome by speaking. This works ALONGSIDE the
+ * manual controls — sliders, buttons and voice commands all update the same
+ * state, so you can use whichever you like at any moment.
+ * ========================================================================= */
+
+// Languages offered for recognition. SpeechRecognition can't enumerate these,
+// so we list common locales; the browser needs matching language support.
+const RECOG_LANGS = [
+  ["en-US", "English (US)"],
+  ["en-GB", "English (UK)"],
+  ["ko-KR", "한국어"],
+  ["ja-JP", "日本語"],
+  ["zh-CN", "中文 (简体)"],
+  ["zh-TW", "中文 (繁體)"],
+  ["es-ES", "Español"],
+  ["fr-FR", "Français"],
+  ["de-DE", "Deutsch"],
+  ["it-IT", "Italiano"],
+  ["pt-BR", "Português (BR)"],
+  ["ru-RU", "Русский"],
+  ["hi-IN", "हिन्दी"],
+];
+
+// Command keywords across many languages — matched as substrings so the user
+// doesn't have to phrase things exactly.
+const KEYWORDS = {
+  play: ["start", "play", "go", "begin", "시작", "재생", "플레이", "スタート",
+    "始め", "再生", "开始", "播放", "empezar", "iniciar", "comenzar",
+    "commencer", "jouer", "start", "spielen", "avvia", "tocar", "старт",
+    "начать"],
+  stop: ["stop", "pause", "halt", "정지", "멈춰", "그만", "스톱", "停止",
+    "止め", "停", "暂停", "parar", "detener", "alto", "arrêter", "stopp",
+    "ferma", "стоп", "стой"],
+  faster: ["faster", "speed up", "quicker", "빠르게", "빨리", "더 빨리",
+    "速く", "はやく", "快", "快点", "更快", "más rápido", "rapido", "rápido",
+    "plus vite", "schneller", "più veloce", "быстрее"],
+  slower: ["slower", "slow down", "느리게", "천천히", "더 느리게", "遅く",
+    "おそく", "慢", "慢点", "更慢", "más lento", "lento", "plus lent",
+    "langsamer", "più lento", "медленнее"],
+  tap: ["tap", "탭", "タップ", "点击", "toque", "taper"],
+  trainer: ["trainer", "train", "훈련", "연습", "트레이너", "トレーナー",
+    "練習", "训练", "练习", "entrenador", "entraîneur", "trainingsmodus"],
+};
+
+let recognition = null;
+let listening = false;
+
+function matchAny(text, list) {
+  return list.some((kw) => text.includes(kw));
+}
+
+function flashCmd(label) {
+  el.vcCmd.textContent = label;
+  el.vcCmd.classList.remove("flash");
+  void el.vcCmd.offsetWidth; // restart the animation
+  el.vcCmd.classList.add("flash");
+}
+
+/** Interpret a recognized phrase and act on it. */
+function handleTranscript(raw) {
+  const text = raw.toLowerCase().trim();
+  el.vcHeard.textContent = "“" + raw.trim() + "”";
+
+  // A spoken number (2–3 digits) sets the tempo directly.
+  const num = text.match(/\d{2,3}/);
+  if (num) {
+    const n = parseInt(num[0], 10);
+    if (n >= BPM_MIN && n <= BPM_MAX) {
+      if (trainer.active) stopTrainer(true);
+      setBpm(n);
+      if (!state.isPlaying) start();
+      flashCmd("→ " + n + " BPM");
+      return;
+    }
+  }
+
+  // "trainer" is checked before play/stop so "start trainer" hits the trainer.
+  if (matchAny(text, KEYWORDS.trainer)) {
+    toggleTrainer();
+    flashCmd(trainer.active ? "Trainer ▶" : "Trainer ■");
+    return;
+  }
+  if (matchAny(text, KEYWORDS.faster)) {
+    if (trainer.active) stopTrainer(true);
+    setBpm(state.bpm + 5);
+    flashCmd("Faster · " + state.bpm);
+    return;
+  }
+  if (matchAny(text, KEYWORDS.slower)) {
+    if (trainer.active) stopTrainer(true);
+    setBpm(state.bpm - 5);
+    flashCmd("Slower · " + state.bpm);
+    return;
+  }
+  if (matchAny(text, KEYWORDS.tap)) {
+    tap();
+    flashCmd("Tap");
+    return;
+  }
+  if (matchAny(text, KEYWORDS.stop)) {
+    if (state.isPlaying) stop();
+    flashCmd("Stop");
+    return;
+  }
+  if (matchAny(text, KEYWORDS.play)) {
+    if (!state.isPlaying) start();
+    flashCmd("Play");
+    return;
+  }
+
+  flashCmd("—"); // heard something, but no command matched
+}
+
+function populateRecogLangs() {
+  RECOG_LANGS.forEach(([code, label]) => {
+    const opt = document.createElement("option");
+    opt.value = code;
+    opt.textContent = label;
+    el.vcLang.appendChild(opt);
+  });
+  // Default to the browser language if it's in the list.
+  const bl = (navigator.language || "en-US").toLowerCase();
+  const exact = RECOG_LANGS.find(([c]) => c.toLowerCase() === bl);
+  const loose = RECOG_LANGS.find(([c]) =>
+    c.toLowerCase().startsWith(bl.split("-")[0])
+  );
+  if (exact) el.vcLang.value = exact[0];
+  else if (loose) el.vcLang.value = loose[0];
+}
+
+function initRecognition() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    el.micBtn.disabled = true;
+    el.micBtn.textContent = "🎤 Not supported";
+    el.vcHeard.innerHTML =
+      '<span class="vc-unsupported">Speech recognition needs Chrome or Edge.</span>';
+    el.vcLang.disabled = true;
+    return;
+  }
+
+  recognition = new SR();
+  recognition.continuous = true;
+  recognition.interimResults = false;
+
+  recognition.onresult = (e) => {
+    const result = e.results[e.results.length - 1];
+    if (result.isFinal) handleTranscript(result[0].transcript);
+  };
+
+  recognition.onerror = (e) => {
+    if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+      listening = false;
+      setMicUI(false);
+      el.vcHeard.innerHTML =
+        '<span class="vc-unsupported">Microphone permission denied.</span>';
+    }
+    // "no-speech" / "aborted" are transient — onend will restart if listening.
+  };
+
+  // The engine stops on its own after silence; restart while we want to listen.
+  recognition.onend = () => {
+    if (listening) {
+      try {
+        recognition.start();
+      } catch (_) {
+        /* already starting */
+      }
+    }
+  };
+}
+
+function setMicUI(on) {
+  el.micBtn.classList.toggle("listening", on);
+  el.micBtn.textContent = on ? "🛑 Stop Listening" : "🎤 Start Listening";
+  if (on) {
+    el.vcHeard.textContent = "Listening… say a command";
+  } else if (!el.vcHeard.querySelector(".vc-unsupported")) {
+    el.vcHeard.textContent = "Mic off";
+  }
+}
+
+function startListening() {
+  if (!recognition) return;
+  ensureAudio(); // unlock audio inside the user gesture
+  recognition.lang = el.vcLang.value;
+  listening = true;
+  try {
+    recognition.start();
+  } catch (_) {
+    /* already running */
+  }
+  setMicUI(true);
+}
+
+function stopListening() {
+  listening = false;
+  if (recognition) recognition.stop();
+  setMicUI(false);
+}
+
+function toggleListening() {
+  listening ? stopListening() : startListening();
+}
+
+el.micBtn.addEventListener("click", toggleListening);
+el.vcLang.addEventListener("change", () => {
+  // Apply the new language immediately by restarting recognition.
+  if (listening && recognition) {
+    recognition.stop(); // onend restarts with the updated lang
+  }
+});
+
+el.voiceToggle.addEventListener("click", () => {
+  const collapsed = el.voicePanel.classList.toggle("collapsed");
+  el.voiceToggle.setAttribute("aria-expanded", String(!collapsed));
+});
+
 // --- Init ---
 buildBeatDots();
 setBpm(120);
@@ -485,3 +713,5 @@ populateVoices();
 if ("speechSynthesis" in window) {
   window.speechSynthesis.onvoiceschanged = populateVoices;
 }
+populateRecogLangs();
+initRecognition();

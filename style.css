@@ -386,3 +386,62 @@ kbd {
   color: var(--accent-strong);
   font-weight: 600;
 }
+
+/* ===== Voice Control ===== */
+#micBtn.listening {
+  background: var(--beat-accent);
+}
+
+.vc-cmd {
+  text-align: center;
+  min-height: 22px;
+  margin-top: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--accent-strong);
+}
+
+.vc-cmd.flash {
+  animation: cmdpop 0.4s ease;
+}
+
+@keyframes cmdpop {
+  0% { transform: scale(0.8); opacity: 0.3; }
+  60% { transform: scale(1.12); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.vc-help {
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.vc-help summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text);
+  padding: 6px 0;
+}
+
+.vc-help ul {
+  margin: 8px 0;
+  padding-left: 18px;
+  line-height: 1.7;
+}
+
+.vc-help b {
+  color: var(--text);
+}
+
+.vc-langs {
+  margin: 6px 0 0;
+  line-height: 1.6;
+}
+
+.vc-unsupported {
+  color: var(--beat-accent);
+  font-size: 13px;
+  text-align: center;
+  margin-top: 8px;
+}
