@@ -121,7 +121,8 @@
 
       <div class="panel-body">
         <p class="panel-desc">
-          Control the metronome by speaking — in the language you choose.
+          Always listening — control everything by voice while you play, without
+          touching the app. Manual controls still work too.
         </p>
 
         <label class="field field-wide">
@@ -131,21 +132,24 @@
 
         <button id="micBtn" class="btn btn-primary btn-block">🎤 Start Listening</button>
 
-        <div class="trainer-status" id="vcHeard">Mic off</div>
+        <div class="trainer-status" id="vcHeard">Starting mic…</div>
         <div class="vc-cmd" id="vcCmd" aria-live="polite"></div>
 
         <details class="vc-help">
-          <summary>Example commands</summary>
+          <summary>Voice commands</summary>
           <ul>
             <li><b>Play / Stop</b> — “start”, “stop”</li>
             <li><b>Set tempo</b> — say a number, e.g. “one hundred twenty”</li>
             <li><b>Faster / Slower</b> — “faster”, “slower”</li>
+            <li><b>Time signature</b> — “three four”, “6/8”, “waltz”</li>
             <li><b>Tap</b> — “tap”</li>
             <li><b>Trainer</b> — “trainer” (start / stop the ramp)</li>
+            <li><b>Reset</b> — “reset” (back to 120 BPM, 4 beats)</li>
           </ul>
           <p class="vc-langs">
-            Also understands Korean (시작·정지·빠르게·느리게), Japanese, Chinese,
-            Spanish, French, German, and more — just pick the language above.
+            Also understands Korean (시작·정지·빠르게·느리게·3박자·리셋),
+            Japanese, Chinese, Spanish, French, German, and more — just pick the
+            language above.
           </p>
         </details>
       </div>

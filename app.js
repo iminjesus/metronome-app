@@ -446,10 +446,16 @@ document.querySelectorAll(".nudge-btn").forEach((btn) => {
   });
 });
 
-el.beatsPerBar.addEventListener("change", (e) => {
-  state.beatsPerBar = Number(e.target.value);
+function setBeatsPerBar(n) {
+  n = Math.max(1, Math.min(8, Math.round(n)));
+  state.beatsPerBar = n;
   state.currentBeat = 0;
+  el.beatsPerBar.value = String(n);
   buildBeatDots();
+}
+
+el.beatsPerBar.addEventListener("change", (e) => {
+  setBeatsPerBar(Number(e.target.value));
 });
 
 el.startBtn.addEventListener("click", toggle);
@@ -529,7 +535,45 @@ const KEYWORDS = {
   tap: ["tap", "탭", "タップ", "点击", "toque", "taper"],
   trainer: ["trainer", "train", "훈련", "연습", "트레이너", "トレーナー",
     "練習", "训练", "练习", "entrenador", "entraîneur", "trainingsmodus"],
+  reset: ["reset", "리셋", "초기화", "リセット", "重置", "reiniciar",
+    "réinitialiser", "zurücksetzen"],
 };
+
+// Number words used when spoken as a time signature ("three four").
+const WORD_NUM = {
+  one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8,
+};
+
+/**
+ * Extract a beats-per-bar value from a phrase like "3/4", "6/8", "waltz",
+ * "3박자", or "three four time". Returns 0 if none is found.
+ */
+function parseBeats(text) {
+  if (/waltz|왈츠|walzer|valse/.test(text)) return 3;
+
+  // Fraction as digits: "3/4", "6/8", or spaced "6 8".
+  const frac = text.match(/([1-8])\s*[/\s]\s*[1-9]\b/);
+  if (frac) return parseInt(frac[1], 10);
+
+  // Two number-words in a row, e.g. "three four", "four four", "six eight".
+  const wordNums = [];
+  const re = /\b(one|two|three|four|five|six|seven|eight)\b/g;
+  let m;
+  while ((m = re.exec(text))) wordNums.push(WORD_NUM[m[1]]);
+  if (wordNums.length >= 2) return wordNums[0];
+
+  // A single number next to a "time signature" keyword.
+  const beatKw =
+    /beat|signature|\btime\b|박자|拍子|拍|takt|tiempo|temps|comp[áa]s/.test(
+      text
+    );
+  if (beatKw) {
+    const dm = text.match(/([1-8])/);
+    if (dm) return parseInt(dm[1], 10);
+    if (wordNums.length) return wordNums[0];
+  }
+  return 0;
+}
 
 let recognition = null;
 let listening = false;
@@ -549,6 +593,23 @@ function flashCmd(label) {
 function handleTranscript(raw) {
   const text = raw.toLowerCase().trim();
   el.vcHeard.textContent = "“" + raw.trim() + "”";
+
+  // Reset tempo + time signature to defaults.
+  if (matchAny(text, KEYWORDS.reset)) {
+    if (trainer.active) stopTrainer(true);
+    setBpm(120);
+    setBeatsPerBar(4);
+    flashCmd("Reset · 120 · 4 beats");
+    return;
+  }
+
+  // Time signature — "3/4", "6/8", "waltz", "3박자", "beats 3".
+  const beats = parseBeats(text);
+  if (beats) {
+    setBeatsPerBar(beats);
+    flashCmd("Time · " + beats + " beats/bar");
+    return;
+  }
 
   // A spoken number (2–3 digits) sets the tempo directly.
   const num = text.match(/\d{2,3}/);
@@ -715,3 +776,19 @@ if ("speechSynthesis" in window) {
 }
 populateRecogLangs();
 initRecognition();
+
+// Always-on: begin listening as soon as the page loads so the app can be
+// controlled entirely by voice. The browser asks for microphone permission
+// the first time; after that it starts silently.
+startListening();
+
+// Audio playback needs one user gesture to unlock. If the player taps or
+// presses any key even once, sound is enabled; otherwise the first spoken
+// command also attempts to resume audio.
+function unlockAudioOnce() {
+  ensureAudio();
+  window.removeEventListener("pointerdown", unlockAudioOnce);
+  window.removeEventListener("keydown", unlockAudioOnce);
+}
+window.addEventListener("pointerdown", unlockAudioOnce);
+window.addEventListener("keydown", unlockAudioOnce);

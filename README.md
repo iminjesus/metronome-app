@@ -16,8 +16,11 @@ A simple, accurate metronome that runs entirely in the browser — no build step
 
 ## Voice commands
 
-Open the **🎤 Voice Control** panel, pick a recognition language, and press
-**Start Listening**. Commands are matched loosely, in the selected language:
+The app **listens automatically** as soon as it loads (the browser asks for
+microphone permission the first time), so you can control everything hands-free
+while playing an instrument. Manual controls keep working at the same time.
+Pick your language in the **🎤 Voice Control** panel. Commands are matched
+loosely, in the selected language:
 
 | Say | Does |
 |-----|------|
@@ -26,13 +29,18 @@ Open the **🎤 Voice Control** panel, pick a recognition language, and press
 | "faster" / "빠르게" | +5 BPM |
 | "slower" / "느리게" | −5 BPM |
 | a number, e.g. "120" | Set the tempo |
+| "three four" / "6/8" / "waltz" / "3박자" | Change the time signature |
 | "tap" | Tap tempo |
 | "trainer" | Start / stop the Speed Trainer |
+| "reset" / "리셋" | Back to 120 BPM, 4 beats |
 
-> Speech recognition uses the Web Speech API, which currently works in
-> **Chrome and Edge** (desktop). The first time, the browser asks for
-> microphone permission. Spoken numbers are recognized as digits; number
-> *words* in some languages may not parse — say or set them manually if so.
+> **Browser:** speech recognition uses the Web Speech API, which currently works
+> in **Chrome and Edge** (desktop). For reliable microphone access, serve the
+> page over `http://localhost` (see below) rather than opening the file
+> directly — some browsers block the mic on `file://` pages.
+>
+> Spoken numbers are recognized as digits; number *words* in some languages may
+> not parse — say or set them manually if so.
 
 ## Run it
 
