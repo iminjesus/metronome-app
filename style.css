@@ -1,0 +1,257 @@
+:root {
+  --bg: #0f1115;
+  --panel: #171a21;
+  --text: #e8eaed;
+  --muted: #9aa0ac;
+  --accent: #4f7cff;
+  --accent-strong: #6b93ff;
+  --beat: #2a2f3a;
+  --beat-on: #4f7cff;
+  --beat-accent: #ff5a5f;
+  --radius: 14px;
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: radial-gradient(circle at 50% 0%, #1a1f2b 0%, var(--bg) 60%);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  padding: 24px;
+}
+
+.app {
+  background: var(--panel);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 22px;
+  box-shadow: var(--shadow);
+  padding: 32px 28px 28px;
+  width: 100%;
+  max-width: 420px;
+  text-align: center;
+}
+
+.title {
+  margin: 0 0 20px;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+/* Beat indicator dots */
+.beats {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  min-height: 22px;
+  margin-bottom: 22px;
+  flex-wrap: wrap;
+}
+
+.beat-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--beat);
+  transition: transform 0.08s ease, background 0.08s ease,
+    box-shadow 0.08s ease;
+}
+
+.beat-dot.active {
+  background: var(--beat-on);
+  transform: scale(1.35);
+  box-shadow: 0 0 16px var(--beat-on);
+}
+
+.beat-dot.active.accent {
+  background: var(--beat-accent);
+  box-shadow: 0 0 18px var(--beat-accent);
+}
+
+/* BPM display */
+.bpm {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+  line-height: 1;
+}
+
+.bpm-value {
+  font-size: 76px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.bpm-label {
+  font-size: 16px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.tempo-name {
+  color: var(--muted);
+  font-size: 14px;
+  font-style: italic;
+  margin: 6px 0 20px;
+  min-height: 18px;
+}
+
+/* Slider */
+.slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(
+    to right,
+    var(--accent) 0%,
+    var(--accent) var(--fill, 50%),
+    var(--beat) var(--fill, 50%),
+    var(--beat) 100%
+  );
+  outline: none;
+  margin: 6px 0 22px;
+}
+
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #fff;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.slider::-moz-range-thumb {
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 50%;
+  background: #fff;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.nudge-btn {
+  flex: 1;
+  padding: 10px 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  background: var(--beat);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.05s ease;
+}
+
+.nudge-btn:hover {
+  background: #333a48;
+}
+
+.nudge-btn:active {
+  transform: scale(0.95);
+}
+
+.signature {
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.signature select {
+  background: var(--beat);
+  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.controls {
+  margin-top: 22px;
+  margin-bottom: 12px;
+}
+
+.btn {
+  padding: 16px 0;
+  font-size: 17px;
+  font-weight: 700;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: transform 0.05s ease, filter 0.15s ease;
+}
+
+.btn:active {
+  transform: scale(0.97);
+}
+
+.btn-primary {
+  flex: 2;
+  background: var(--accent);
+  color: #fff;
+}
+
+.btn-primary.playing {
+  background: var(--beat-accent);
+}
+
+.btn-primary:hover {
+  filter: brightness(1.08);
+}
+
+.btn-secondary {
+  flex: 1;
+  background: var(--beat);
+  color: var(--text);
+}
+
+.btn-secondary:hover {
+  background: #333a48;
+}
+
+.hint {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 8px 0 0;
+}
+
+kbd {
+  background: var(--beat);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-family: inherit;
+  font-size: 11px;
+}

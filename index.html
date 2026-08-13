@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0f1115" />
+  <title>Metronome</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="app">
+    <h1 class="title">Metronome</h1>
+
+    <!-- Visual beat indicator -->
+    <div class="beats" id="beats" aria-hidden="true"></div>
+
+    <!-- BPM display -->
+    <div class="bpm">
+      <span class="bpm-value" id="bpmValue">120</span>
+      <span class="bpm-label">BPM</span>
+    </div>
+    <div class="tempo-name" id="tempoName">Allegro</div>
+
+    <!-- BPM slider -->
+    <input
+      type="range"
+      id="bpmSlider"
+      class="slider"
+      min="30"
+      max="240"
+      value="120"
+      step="1"
+      aria-label="Tempo in beats per minute"
+    />
+
+    <!-- Fine tune buttons -->
+    <div class="row nudge">
+      <button class="nudge-btn" data-delta="-5" aria-label="Decrease 5 BPM">−5</button>
+      <button class="nudge-btn" data-delta="-1" aria-label="Decrease 1 BPM">−1</button>
+      <button class="nudge-btn" data-delta="1" aria-label="Increase 1 BPM">+1</button>
+      <button class="nudge-btn" data-delta="5" aria-label="Increase 5 BPM">+5</button>
+    </div>
+
+    <!-- Time signature -->
+    <div class="row signature">
+      <label for="beatsPerBar">Beats per bar</label>
+      <select id="beatsPerBar" aria-label="Beats per bar">
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4" selected>4</option>
+        <option value="5">5</option>
+        <option value="6">6</option>
+        <option value="7">7</option>
+        <option value="8">8</option>
+      </select>
+    </div>
+
+    <!-- Controls -->
+    <div class="row controls">
+      <button id="tapBtn" class="btn btn-secondary" aria-label="Tap tempo">Tap</button>
+      <button id="startBtn" class="btn btn-primary" aria-label="Start or stop">Start</button>
+    </div>
+
+    <p class="hint">Press <kbd>Space</kbd> to start/stop · <kbd>T</kbd> to tap</p>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
