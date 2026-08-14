@@ -792,3 +792,11 @@ function unlockAudioOnce() {
 }
 window.addEventListener("pointerdown", unlockAudioOnce);
 window.addEventListener("keydown", unlockAudioOnce);
+
+// Register the service worker so the app is installable and works offline.
+// (Requires https or localhost — e.g. GitHub Pages or `python -m http.server`.)
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  });
+}

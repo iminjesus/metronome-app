@@ -53,6 +53,21 @@ python3 -m http.server 8000
 # then visit http://localhost:8000
 ```
 
+## Install as an app (PWA)
+
+The app is a Progressive Web App, so it can be installed on a phone or desktop
+and run full-screen like a native app — no app store needed. It must be served
+over **https** (e.g. GitHub Pages) or `http://localhost` for install + offline
+to work.
+
+- **Android (Chrome):** open the site → menu → **Add to Home screen / Install app**
+- **iOS (Safari):** open the site → Share → **Add to Home Screen**
+- **Desktop (Chrome/Edge):** an **install** icon appears in the address bar
+
+> Note: hands-free voice control uses the Web Speech API, which works in Chrome
+> (desktop/Android) but **not on iOS**. On iOS the metronome, trainer, and
+> spoken tempo announcements still work; only voice *commands* are unavailable.
+
 ## Files
 
 | File | Purpose |
