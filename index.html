@@ -74,53 +74,8 @@
 
     <p class="hint">Press <kbd>Space</kbd> to start/stop · <kbd>T</kbd> to tap</p>
 
-    <!-- ===== Speed Trainer ===== -->
-    <section class="panel" id="trainerPanel">
-      <button class="panel-head" id="trainerToggle" aria-expanded="true">
-        <span>🎯 Speed Trainer</span>
-        <span class="chevron">▾</span>
-      </button>
-
-      <div class="panel-body" id="trainerBody">
-        <p class="panel-desc">
-          Ramps the tempo up automatically — great for building speed.
-        </p>
-
-        <div class="field-grid">
-          <label class="field">
-            <span>Start BPM</span>
-            <input type="number" id="tStart" min="30" max="240" value="50" />
-          </label>
-          <label class="field">
-            <span>Target BPM</span>
-            <input type="number" id="tTarget" min="30" max="240" value="150" />
-          </label>
-          <label class="field">
-            <span>Step (BPM)</span>
-            <input type="number" id="tStep" min="1" max="60" value="10" />
-          </label>
-          <label class="field">
-            <span>Every (sec)</span>
-            <input type="number" id="tInterval" min="2" max="600" value="30" />
-          </label>
-        </div>
-
-        <!-- Voice options -->
-        <label class="switch-row">
-          <input type="checkbox" id="voiceOn" checked />
-          <span>Announce tempo by voice</span>
-        </label>
-
-        <label class="field field-wide">
-          <span>Voice / Language</span>
-          <select id="voiceSelect" aria-label="Voice language"></select>
-        </label>
-
-        <button id="trainerBtn" class="btn btn-primary btn-block">Start Trainer</button>
-
-        <div class="trainer-status" id="trainerStatus">Ready · 50 → 150 BPM</div>
-      </div>
-    </section>
+    <!-- Speed ramp status — started by voice, shown only while running -->
+    <div class="ramp-status" id="rampStatus" hidden></div>
 
     <!-- ===== Voice Control (Speech Recognition) ===== -->
     <section class="panel" id="voicePanel">
@@ -153,7 +108,7 @@
             <li><b>Faster / Slower</b> — “faster”, “slower”</li>
             <li><b>Time signature</b> — “three four”, “6/8”, “waltz”</li>
             <li><b>Tap</b> — “tap”</li>
-            <li><b>Trainer</b> — “trainer” (start / stop the ramp)</li>
+            <li><b>Speed ramp</b> — “trainer 50 to 150 by 10 every 30” (any part optional; “trainer” alone uses 50 → 150, +10 / 30s). Say “stop” to end it.</li>
             <li><b>Reset</b> — “reset” (back to 120 BPM, 4 beats)</li>
           </ul>
           <p class="vc-langs">
