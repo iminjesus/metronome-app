@@ -1,5 +1,5 @@
-/* Simple offline cache for the app shell. Bump CACHE to ship an update. */
-const CACHE = "metronome-v1";
+/* Offline cache for the app shell. Bump CACHE to ship an update. */
+const CACHE = "metronome-v2";
 const ASSETS = [
   "./",
   "./index.html",
@@ -32,12 +32,21 @@ self.addEventListener("activate", (e) => {
   );
 });
 
+// Network-first for everything: when online you always get the latest push;
+// the cache is refreshed in the background and used only as an offline fallback.
 self.addEventListener("fetch", (e) => {
   if (e.request.method !== "GET") return;
-  // Network-first for navigations so updates show promptly; cache fallback offline.
-  if (e.request.mode === "navigate") {
-    e.respondWith(fetch(e.request).catch(() => caches.match("./index.html")));
-    return;
-  }
-  e.respondWith(caches.match(e.request).then((hit) => hit || fetch(e.request)));
+  e.respondWith(
+    fetch(e.request)
+      .then((res) => {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put(e.request, copy)).catch(() => {});
+        return res;
+      })
+      .catch(() =>
+        caches
+          .match(e.request)
+          .then((hit) => hit || caches.match("./index.html"))
+      )
+  );
 });
