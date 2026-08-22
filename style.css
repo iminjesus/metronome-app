@@ -488,3 +488,6 @@ kbd {
   margin: 14px 0 18px;
   min-height: 24px;
 }
+
+/* Tap tempo button (full width, compact) */
+.tap-btn { display: block; width: 100%; margin: 2px 0 4px; }

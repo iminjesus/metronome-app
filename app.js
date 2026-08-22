@@ -143,6 +143,7 @@ const el = {
   tempoName: document.getElementById("tempoName"),
   beats: document.getElementById("beats"),
   beatsPerBar: document.getElementById("beatsPerBar"),
+  tapBtn: document.getElementById("tapBtn"),
   dial: document.getElementById("dial"),
   knob: document.getElementById("knob"),
   dialCenter: document.getElementById("dialCenter"),
@@ -1036,6 +1037,7 @@ document.querySelectorAll(".nudge-btn").forEach((btn) => {
 el.beatsPerBar.addEventListener("change", (e) => {
   setTimeSignature(Number(e.target.value), state.denominator);
 });
+el.tapBtn.addEventListener("click", tap);
 el.micBtn.addEventListener("click", toggleListening);
 el.vcLang.addEventListener("change", () => {
   if (listening && recognition) recognition.stop();
