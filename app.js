@@ -139,6 +139,7 @@ const notesInQueue = [];
 
 // --- DOM ---
 const el = {
+  bpm: document.querySelector(".bpm"),
   bpmValue: document.getElementById("bpmValue"),
   tempoName: document.getElementById("tempoName"),
   beats: document.getElementById("beats"),
@@ -288,8 +289,33 @@ function setSubdiv(n) {
 
 // --- Tap tempo ---
 let tapTimes = [];
+
+/** A short audible click so each tap gives feedback even when stopped. */
+function tapClick() {
+  ensureAudio();
+  const t = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.frequency.value = 1200;
+  gain.gain.setValueAtTime(0.0001, t);
+  gain.gain.exponentialRampToValueAtTime(0.35, t + 0.001);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.04);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start(t);
+  osc.stop(t + 0.05);
+}
+
+function pulseBpm() {
+  el.bpm.classList.remove("tap-flash");
+  void el.bpm.offsetWidth; // restart the animation
+  el.bpm.classList.add("tap-flash");
+}
+
 function tap() {
   const now = performance.now();
+  tapClick();
+  pulseBpm();
   if (tapTimes.length && now - tapTimes[tapTimes.length - 1] > 2000) tapTimes = [];
   tapTimes.push(now);
   if (tapTimes.length > 5) tapTimes.shift();
