@@ -24,14 +24,14 @@ loosely, in the selected language:
 
 | Say | Does |
 |-----|------|
-| "start" / "시작" | Play |
+| "go" / "start" / "시작" | Play |
 | "stop" / "정지" | Stop |
 | "faster" / "빠르게" | +5 BPM |
 | "slower" / "느리게" | −5 BPM |
 | a number, e.g. "120" | Set the tempo |
 | "three four" / "6/8" / "waltz" / "3박자" | Change the time signature |
 | "tap" | Tap tempo |
-| "trainer 50 to 150 by 10 every 30" | Start a speed ramp (any part optional; "trainer" alone = 50 → 150, +10 / 30s). "stop" ends it. |
+| "50 to 150" / "from 50 up to 150 by 10 every 30" / "50부터 시작해서 150까지 10씩 30초마다" | Start a speed ramp — just name a start and target however you like (extra parts optional; "trainer" alone = 50 → 150, +10 / 30s). "stop" ends it. |
 | "reset" / "리셋" | Back to 120 BPM, 4 beats |
 
 > **Browser:** speech recognition uses the Web Speech API, which currently works

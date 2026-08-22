@@ -292,31 +292,68 @@ const trainer = {
 };
 
 /**
+ * Does this phrase describe a speed ramp? True when it names the ramp
+ * explicitly ("trainer"/"트레이너") or has both a start and a target — e.g.
+ * "50 to 150", "50부터 시작해서 200까지", "from 50 up to 200".
+ */
+function isRampPhrase(text) {
+  if (matchAny(text, KEYWORDS.trainer)) return true;
+  // Two numbers joined by a range word ("50 to 150", "50에서 150").
+  if (/(\d{1,3})\s*(?:to|~|–|-|에서|부터)\s*(\d{1,3})/.test(text)) return true;
+  // Separate start and target markers, possibly with words between them.
+  const hasStart =
+    /(\d{1,3})\s*(?:부터|에서)/.test(text) || /\b(?:from|starting)\b/.test(text);
+  const hasTarget =
+    /(\d{1,3})\s*까지/.test(text) || /\b(?:to|until)\b/.test(text);
+  if (hasStart && hasTarget) return true;
+  if (/시작/.test(text) && /까지/.test(text)) return true;
+  return false;
+}
+
+/**
  * Parse a spoken ramp command into { start, target, step, interval }.
- * Understands e.g. "trainer 50 to 150 by 10 every 30",
- * "50에서 150까지 10씩 30초마다"; any missing part uses a default.
+ * Understands loose phrasing like "trainer 50 to 150 by 10 every 30",
+ * "50부터 시작해서 200까지 10씩 30초마다", "from 50 up to 200 step 5 every 20
+ * seconds". Any missing part uses a default. Start/target are found by their
+ * markers (부터/에서/from, 까지/to/until) so words may sit between them.
  */
 function parseTrainerConfig(text) {
   const cfg = { start: 50, target: 150, step: 10, interval: 30 };
   let m;
 
   // Interval (seconds between steps).
-  if ((m = text.match(/(?:every|각|매|마다)\s*(\d{1,3})/)))
+  if ((m = text.match(/(?:every|각|매|마다|간격)\s*(\d{1,3})/)))
     cfg.interval = clampRange(+m[1], 2, 600);
   if ((m = text.match(/(\d{1,3})\s*(?:초|secs?|seconds?)/)))
     cfg.interval = clampRange(+m[1], 2, 600);
 
   // Step size.
-  if ((m = text.match(/(?:by|step|스텝|단계)\s*(\d{1,3})/)))
+  if ((m = text.match(/(?:by|steps?(?:\s+of)?|스텝|단계)\s*(\d{1,3})/)))
     cfg.step = clampRange(+m[1], 1, 60);
   if ((m = text.match(/(\d{1,3})\s*씩/))) cfg.step = clampRange(+m[1], 1, 60);
 
-  // Start → target ("50 to 150", "50에서 150", "50 - 150").
-  m = text.match(/(\d{1,3})\s*(?:to|~|-|–|에서|부터)\s*(\d{1,3})/);
-  if (m) {
-    cfg.start = clampBpm(+m[1]);
-    cfg.target = clampBpm(+m[2]);
+  // Start & target via markers (allow words in between).
+  let startN = null;
+  let targetN = null;
+  if ((m = text.match(/(\d{1,3})\s*(?:부터|에서)/))) startN = +m[1];
+  else if ((m = text.match(/(?:from|starting(?:\s+at)?)\s+(\d{1,3})/)))
+    startN = +m[1];
+
+  if ((m = text.match(/(\d{1,3})\s*까지/))) targetN = +m[1];
+  else if ((m = text.match(/(?:up to|\bto\b|\buntil\b|목표)\s*(\d{1,3})/)))
+    targetN = +m[1];
+
+  // Adjacent "A to B" fallback fills whichever marker was missing.
+  if (startN === null || targetN === null) {
+    m = text.match(/(\d{1,3})\s*(?:to|~|–|-|에서|부터)\s*(\d{1,3})/);
+    if (m) {
+      if (startN === null) startN = +m[1];
+      if (targetN === null) targetN = +m[2];
+    }
   }
+
+  if (startN !== null) cfg.start = clampBpm(startN);
+  if (targetN !== null) cfg.target = clampBpm(targetN);
   return cfg;
 }
 
@@ -416,12 +453,13 @@ const RECOG_LANGS = [
 ];
 
 const KEYWORDS = {
-  play: ["start", "play", "go", "begin", "시작", "재생", "플레이", "スタート",
-    "始め", "再生", "开始", "播放", "empezar", "iniciar", "comenzar",
-    "commencer", "jouer", "spielen", "avvia", "tocar", "старт", "начать"],
-  stop: ["stop", "pause", "halt", "정지", "멈춰", "그만", "스톱", "停止",
-    "止め", "停", "暂停", "parar", "detener", "alto", "arrêter", "stopp",
-    "ferma", "стоп", "стой"],
+  play: ["start", "play", "go", "begin", "resume", "run", "시작", "고", "재생",
+    "플레이", "スタート", "始め", "再生", "开始", "播放", "empezar", "iniciar",
+    "comenzar", "commencer", "jouer", "spielen", "avvia", "tocar", "старт",
+    "начать"],
+  stop: ["stop", "pause", "halt", "end", "quit", "정지", "멈춰", "그만", "스톱",
+    "꺼", "停止", "止め", "停", "暂停", "parar", "detener", "alto", "arrêter",
+    "stopp", "ferma", "стоп", "стой"],
   faster: ["faster", "speed up", "quicker", "빠르게", "빨리", "더 빨리",
     "速く", "はやく", "快", "快点", "更快", "más rápido", "rapido", "rápido",
     "plus vite", "schneller", "più veloce", "быстрее"],
@@ -495,15 +533,18 @@ function handleTranscript(raw) {
 
   // Speed ramp — checked before number/beat parsing so its numbers aren't
   // mistaken for a tempo or time signature.
-  if (matchAny(text, KEYWORDS.trainer)) {
-    if (trainer.active) {
+  if (isRampPhrase(text)) {
+    const hasNums = /\d{2,3}/.test(text);
+    // A bare "trainer"/"ramp" with no numbers toggles a running ramp off.
+    if (!hasNums && trainer.active) {
       stopTrainer();
       flashCmd("Ramp ■");
-    } else {
-      const cfg = parseTrainerConfig(text);
-      startTrainer(cfg);
-      flashCmd(`Ramp ▶ ${cfg.start}→${cfg.target}`);
+      return;
     }
+    const cfg = parseTrainerConfig(text);
+    if (trainer.active) stopTrainer(); // restart with the new settings
+    startTrainer(cfg);
+    flashCmd(`Ramp ▶ ${cfg.start}→${cfg.target}`);
     return;
   }
 
