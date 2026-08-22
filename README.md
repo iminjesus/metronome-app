@@ -4,8 +4,10 @@ A simple, accurate metronome that runs entirely in the browser — no build step
 
 ## Features
 
+- **Skeuomorphic device UI** — an LCD panel (tempo, time signature, subdivision) and a large rotary dial you turn to set the tempo, with ‹ › fine-tune arrows and a center start/stop
 - **Accurate timing** using the Web Audio API with a look-ahead scheduler (clicks stay on the audio clock, not the jittery JS timer)
-- **Tempo control** from 30–240 BPM via slider or ±1 / ±5 nudge buttons
+- **Tempo control** from 30–240 BPM by turning the dial or the ‹ › arrows
+- **Time signature & subdivision** — numerator/denominator (tap the display or the pad to cycle) and 1–4 subdivisions per beat
 - **Tap tempo** — tap the button (or press `T`) to set the tempo by feel
 - **Time signatures** — 1 to 8 beats per bar, with an accented downbeat
 - **Visual beat indicator** synced to the audio
@@ -30,7 +32,8 @@ loosely, in the selected language:
 | "slower" / "느리게" | −5 BPM |
 | a number, e.g. "120" | Set the tempo |
 | "presto" / "andante" / "allegro" / "안단테" … | Set the tempo by its Italian marking |
-| "three four" / "6/8" / "waltz" / "3박자" | Change the time signature |
+| "three four" / "6/8" / "8분의 6박자" / "waltz" | Change the time signature (numerator/denominator) |
+| "subdivision 2" / "세분박 3" | Set the beat subdivision (1–4) |
 | "tap" | Tap tempo |
 | "50 to 150" / "from 50 up to 150 by 10 every 30" / "50부터 시작해서 150까지 10씩 30초마다" | Start a speed ramp — just name a start and target however you like (extra parts optional; "trainer" alone = 50 → 150, +10 / 30s). "stop" ends it. |
 | "reset" / "리셋" | Back to 120 BPM, 4 beats |

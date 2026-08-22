@@ -1,39 +1,28 @@
 /**
  * Metronome — accurate timing via the Web Audio API.
  *
- * Uses a look-ahead scheduler (Chris Wilson's "A Tale of Two Clocks" pattern):
- * a setInterval fires frequently but only schedules audio events that fall
- * inside a short look-ahead window, so click timing rides on the sample-accurate
- * audio clock instead of the jittery JS timer.
+ * Look-ahead scheduler (Chris Wilson's "A Tale of Two Clocks"): a setInterval
+ * fires often but only schedules audio that falls inside a short window, so
+ * click timing rides the sample-accurate audio clock, not the JS timer.
  *
- * The metronome can be driven entirely by voice (speech recognition), including
- * a spoken "speed ramp" that raises the tempo automatically and announces each
- * change out loud.
+ * Controls: a rotary dial, tap tempo, time-signature & subdivision, plus
+ * hands-free voice control (including a spoken speed ramp).
  */
 
 // --- Tempo naming (traditional Italian markings) ---
 const TEMPO_NAMES = [
-  [40, "Grave"],
-  [60, "Largo"],
-  [66, "Larghetto"],
-  [76, "Adagio"],
-  [108, "Andante"],
-  [121, "Moderato"],
-  [156, "Allegro"],
-  [176, "Vivace"],
-  [200, "Presto"],
-  [Infinity, "Prestissimo"],
+  [40, "Grave"], [60, "Largo"], [66, "Larghetto"], [76, "Adagio"],
+  [108, "Andante"], [121, "Moderato"], [156, "Allegro"], [176, "Vivace"],
+  [200, "Presto"], [Infinity, "Prestissimo"],
 ];
 
 function tempoName(bpm) {
-  for (const [max, name] of TEMPO_NAMES) {
-    if (bpm < max) return name;
-  }
+  for (const [max, name] of TEMPO_NAMES) if (bpm < max) return name;
   return "";
 }
 
 // Spoken tempo markings → a representative BPM inside that marking's range.
-// More specific names come first so "presto" doesn't shadow "prestissimo".
+// More specific names first so "presto" doesn't shadow "prestissimo".
 const TEMPO_TERMS = [
   { bpm: 38, names: ["grave", "그라베"] },
   { bpm: 210, names: ["prestissimo", "프레스티시모", "프레스티시오"] },
@@ -48,11 +37,8 @@ const TEMPO_TERMS = [
   { bpm: 50, names: ["largo", "라르고"] },
 ];
 
-/** Return the BPM for a spoken tempo marking, or 0 if none is mentioned. */
 function parseTempoTerm(text) {
-  for (const t of TEMPO_TERMS) {
-    if (t.names.some((n) => text.includes(n))) return t.bpm;
-  }
+  for (const t of TEMPO_TERMS) if (t.names.some((n) => text.includes(n))) return t.bpm;
   return 0;
 }
 
@@ -60,35 +46,45 @@ const BPM_MIN = 30;
 const BPM_MAX = 240;
 const clampBpm = (n) => Math.max(BPM_MIN, Math.min(BPM_MAX, Math.round(n)));
 const clampRange = (n, lo, hi) => Math.max(lo, Math.min(hi, Math.round(n)));
+const VALID_DEN = [1, 2, 4, 8, 16, 32];
+const SUBDIV_GLYPH = { 1: "♩", 2: "♫", 3: "♪³", 4: "♬" };
 
 // --- State ---
 const state = {
   bpm: 120,
-  beatsPerBar: 4,
+  numerator: 4,
+  denominator: 4,
+  subdiv: 1,
   isPlaying: false,
-  currentBeat: 0, // 0-indexed beat within the bar for the *next* scheduled note
-  nextNoteTime: 0, // audio-clock time of the next note
+  currentBeat: 0,
+  currentSub: 0,
+  nextNoteTime: 0,
 };
 
-const LOOKAHEAD_MS = 25; // how often the scheduler wakes up
-const SCHEDULE_AHEAD = 0.1; // how far ahead (seconds) to schedule audio
+const LOOKAHEAD_MS = 25;
+const SCHEDULE_AHEAD = 0.1;
 
 let audioCtx = null;
 let schedulerTimer = null;
-// Queue of {beat, time} so the visual can be flipped exactly when a note plays.
 const notesInQueue = [];
 
 // --- DOM ---
 const el = {
   bpmValue: document.getElementById("bpmValue"),
   tempoName: document.getElementById("tempoName"),
-  slider: document.getElementById("bpmSlider"),
+  tsValue: document.getElementById("tsValue"),
+  subValue: document.getElementById("subValue"),
   beats: document.getElementById("beats"),
-  beatsPerBar: document.getElementById("beatsPerBar"),
-  startBtn: document.getElementById("startBtn"),
+  dial: document.getElementById("dial"),
+  knob: document.getElementById("knob"),
+  dialCenter: document.getElementById("dialCenter"),
+  arrowUp: document.getElementById("arrowUp"),
+  arrowDown: document.getElementById("arrowDown"),
+  tsBtn: document.getElementById("tsBtn"),
   tapBtn: document.getElementById("tapBtn"),
   rampStatus: document.getElementById("rampStatus"),
-  // Voice Control (speech recognition)
+  settingsBtn: document.getElementById("settingsBtn"),
+  // Voice Control
   voicePanel: document.getElementById("voicePanel"),
   voiceToggle: document.getElementById("voiceToggle"),
   micBtn: document.getElementById("micBtn"),
@@ -99,45 +95,45 @@ const el = {
 
 // --- Audio ---
 function ensureAudio() {
-  if (!audioCtx) {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  }
-  if (audioCtx.state === "suspended") {
-    audioCtx.resume();
-  }
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === "suspended") audioCtx.resume();
 }
 
-/** Schedule a short click at the given audio-clock time. Accent = first beat. */
-function scheduleClick(beat, time) {
+/** Schedule a click. sub===0 is a main beat (accented on beat 0); else a subdivision. */
+function scheduleClick(beat, sub, time) {
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
-  const isAccent = beat === 0;
+  const isMain = sub === 0;
+  const isAccent = isMain && beat === 0;
 
-  osc.frequency.value = isAccent ? 1500 : 1000;
+  osc.frequency.value = isAccent ? 1500 : isMain ? 1000 : 1300;
+  const peak = isAccent ? 0.6 : isMain ? 0.4 : 0.18;
+  const dur = isMain ? 0.05 : 0.03;
 
-  // Fast percussive envelope so clicks don't smear.
-  const peak = isAccent ? 0.6 : 0.4;
   gain.gain.setValueAtTime(0.0001, time);
   gain.gain.exponentialRampToValueAtTime(peak, time + 0.001);
-  gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.05);
+  gain.gain.exponentialRampToValueAtTime(0.0001, time + dur);
 
   osc.connect(gain);
   gain.connect(audioCtx.destination);
   osc.start(time);
   osc.stop(time + 0.06);
 
-  notesInQueue.push({ beat, time });
+  notesInQueue.push({ beat, sub, time });
 }
 
 function advanceNote() {
-  const secondsPerBeat = 60.0 / state.bpm;
-  state.nextNoteTime += secondsPerBeat;
-  state.currentBeat = (state.currentBeat + 1) % state.beatsPerBar;
+  state.nextNoteTime += 60.0 / state.bpm / state.subdiv;
+  state.currentSub += 1;
+  if (state.currentSub >= state.subdiv) {
+    state.currentSub = 0;
+    state.currentBeat = (state.currentBeat + 1) % state.numerator;
+  }
 }
 
 function scheduler() {
   while (state.nextNoteTime < audioCtx.currentTime + SCHEDULE_AHEAD) {
-    scheduleClick(state.currentBeat, state.nextNoteTime);
+    scheduleClick(state.currentBeat, state.currentSub, state.nextNoteTime);
     advanceNote();
   }
 }
@@ -147,16 +143,15 @@ function drawLoop() {
   if (!state.isPlaying) return;
   const now = audioCtx.currentTime;
   while (notesInQueue.length && notesInQueue[0].time <= now) {
-    flashBeat(notesInQueue.shift().beat);
+    const n = notesInQueue.shift();
+    if (n.sub === 0) flashBeat(n.beat);
   }
   requestAnimationFrame(drawLoop);
 }
 
 function flashBeat(beat) {
   const dots = el.beats.children;
-  for (let i = 0; i < dots.length; i++) {
-    dots[i].classList.remove("active", "accent");
-  }
+  for (let i = 0; i < dots.length; i++) dots[i].classList.remove("active", "accent");
   const dot = dots[beat];
   if (dot) {
     dot.classList.add("active");
@@ -169,12 +164,12 @@ function start() {
   ensureAudio();
   state.isPlaying = true;
   state.currentBeat = 0;
+  state.currentSub = 0;
   state.nextNoteTime = audioCtx.currentTime + 0.05;
   notesInQueue.length = 0;
   schedulerTimer = setInterval(scheduler, LOOKAHEAD_MS);
   requestAnimationFrame(drawLoop);
-  el.startBtn.textContent = "Stop";
-  el.startBtn.classList.add("playing");
+  el.dialCenter.classList.add("playing");
 }
 
 function stop() {
@@ -182,12 +177,8 @@ function stop() {
   clearInterval(schedulerTimer);
   schedulerTimer = null;
   notesInQueue.length = 0;
-  for (const dot of el.beats.children) {
-    dot.classList.remove("active", "accent");
-  }
-  el.startBtn.textContent = "Start";
-  el.startBtn.classList.remove("playing");
-  // Stopping the metronome also cancels a running ramp.
+  for (const dot of el.beats.children) dot.classList.remove("active", "accent");
+  el.dialCenter.classList.remove("playing");
   if (trainer.active) stopTrainer();
 }
 
@@ -195,59 +186,77 @@ function toggle() {
   state.isPlaying ? stop() : start();
 }
 
-// --- BPM handling ---
+// --- BPM ---
 function setBpm(bpm) {
   state.bpm = clampBpm(bpm);
   el.bpmValue.textContent = state.bpm;
   el.tempoName.textContent = tempoName(state.bpm);
-  el.slider.value = state.bpm;
-  const pct = ((state.bpm - BPM_MIN) / (BPM_MAX - BPM_MIN)) * 100;
-  el.slider.style.setProperty("--fill", pct + "%");
+  updateKnob();
 }
 
-function buildBeatDots() {
+function updateKnob() {
+  const frac = (state.bpm - BPM_MIN) / (BPM_MAX - BPM_MIN);
+  el.knob.style.transform = "rotate(" + (frac * 270 - 135) + "deg)";
+}
+
+// --- Time signature & subdivision ---
+function buildBeats() {
   el.beats.innerHTML = "";
-  for (let i = 0; i < state.beatsPerBar; i++) {
+  for (let i = 0; i < state.numerator; i++) {
     const dot = document.createElement("div");
     dot.className = "beat-dot";
     el.beats.appendChild(dot);
   }
 }
 
-function setBeatsPerBar(n) {
-  n = Math.max(1, Math.min(8, Math.round(n)));
-  state.beatsPerBar = n;
+function setTimeSignature(num, den) {
+  state.numerator = Math.max(1, Math.min(12, Math.round(num)));
+  state.denominator = VALID_DEN.includes(den) ? den : 4;
   state.currentBeat = 0;
-  el.beatsPerBar.value = String(n);
-  buildBeatDots();
+  state.currentSub = 0;
+  const label = state.numerator + "/" + state.denominator;
+  el.tsValue.textContent = label;
+  el.tsBtn.textContent = label;
+  buildBeats();
+}
+
+const TS_PRESETS = [
+  [4, 4], [3, 4], [2, 4], [6, 8], [5, 4], [7, 8], [9, 8], [12, 8], [2, 2],
+];
+function cycleTimeSignature() {
+  const i = TS_PRESETS.findIndex(
+    ([n, d]) => n === state.numerator && d === state.denominator
+  );
+  const [n, d] = TS_PRESETS[(i + 1) % TS_PRESETS.length];
+  setTimeSignature(n, d);
+}
+
+function setSubdiv(n) {
+  state.subdiv = Math.max(1, Math.min(4, Math.round(n)));
+  el.subValue.textContent = SUBDIV_GLYPH[state.subdiv];
+}
+function cycleSubdiv() {
+  setSubdiv((state.subdiv % 4) + 1);
 }
 
 // --- Tap tempo ---
 let tapTimes = [];
 function tap() {
   const now = performance.now();
-  if (tapTimes.length && now - tapTimes[tapTimes.length - 1] > 2000) {
-    tapTimes = [];
-  }
+  if (tapTimes.length && now - tapTimes[tapTimes.length - 1] > 2000) tapTimes = [];
   tapTimes.push(now);
   if (tapTimes.length > 5) tapTimes.shift();
-
   if (tapTimes.length >= 2) {
     let total = 0;
-    for (let i = 1; i < tapTimes.length; i++) {
-      total += tapTimes[i] - tapTimes[i - 1];
-    }
+    for (let i = 1; i < tapTimes.length; i++) total += tapTimes[i] - tapTimes[i - 1];
     setBpm(60000 / (total / (tapTimes.length - 1)));
   }
 }
 
 /* =========================================================================
- * Voice announcements (Text-to-Speech). The spoken voice follows the chosen
- * recognition language, so commands and announcements share one language.
+ * Voice announcements (TTS) — voice follows the recognition language.
  * ========================================================================= */
-
 let voices = [];
-
 const PHRASES = {
   en: { start: "Start", done: "Target reached" },
   ko: { start: "시작", done: "목표 도달" },
@@ -264,8 +273,6 @@ const PHRASES = {
 function loadVoices() {
   if ("speechSynthesis" in window) voices = window.speechSynthesis.getVoices();
 }
-
-/** Pick a TTS voice matching the currently selected recognition language. */
 function selectedVoice() {
   if (!voices.length) return null;
   const want = (el.vcLang.value || navigator.language || "en").toLowerCase();
@@ -276,12 +283,10 @@ function selectedVoice() {
     voices[0]
   );
 }
-
 function phraseFor(voice, key) {
   const lang = (voice ? voice.lang : el.vcLang.value || "en").toLowerCase();
   return (PHRASES[lang.split("-")[0]] || PHRASES.en)[key];
 }
-
 function speak(text) {
   if (!("speechSynthesis" in window)) return;
   window.speechSynthesis.cancel();
@@ -291,11 +296,8 @@ function speak(text) {
     u.voice = v;
     u.lang = v.lang;
   }
-  u.rate = 1;
-  u.volume = 1;
   window.speechSynthesis.speak(u);
 }
-
 function speakNumber(n) {
   speak(String(n));
 }
@@ -303,28 +305,14 @@ function speakNumber(n) {
 /* =========================================================================
  * Speed ramp — started and configured by voice.
  * ========================================================================= */
-
 const trainer = {
-  active: false,
-  target: 150,
-  step: 10,
-  interval: 30,
-  dir: 1,
-  stepTimer: null,
-  countdown: null,
-  remaining: 0,
+  active: false, target: 150, step: 10, interval: 30, dir: 1,
+  stepTimer: null, countdown: null, remaining: 0,
 };
 
-/**
- * Does this phrase describe a speed ramp? True when it names the ramp
- * explicitly ("trainer"/"트레이너") or has both a start and a target — e.g.
- * "50 to 150", "50부터 시작해서 200까지", "from 50 up to 200".
- */
 function isRampPhrase(text) {
   if (matchAny(text, KEYWORDS.trainer)) return true;
-  // Two numbers joined by a range word ("50 to 150", "50에서 150").
   if (/(\d{1,3})\s*(?:to|~|–|-|에서|부터)\s*(\d{1,3})/.test(text)) return true;
-  // Separate start and target markers, possibly with words between them.
   const hasStart =
     /(\d{1,3})\s*(?:부터|에서)/.test(text) || /\b(?:from|starting)\b/.test(text);
   const hasTarget =
@@ -334,40 +322,24 @@ function isRampPhrase(text) {
   return false;
 }
 
-/**
- * Parse a spoken ramp command into { start, target, step, interval }.
- * Understands loose phrasing like "trainer 50 to 150 by 10 every 30",
- * "50부터 시작해서 200까지 10씩 30초마다", "from 50 up to 200 step 5 every 20
- * seconds". Any missing part uses a default. Start/target are found by their
- * markers (부터/에서/from, 까지/to/until) so words may sit between them.
- */
 function parseTrainerConfig(text) {
   const cfg = { start: 50, target: 150, step: 10, interval: 30 };
   let m;
-
-  // Interval (seconds between steps).
   if ((m = text.match(/(?:every|각|매|마다|간격)\s*(\d{1,3})/)))
     cfg.interval = clampRange(+m[1], 2, 600);
   if ((m = text.match(/(\d{1,3})\s*(?:초|secs?|seconds?)/)))
     cfg.interval = clampRange(+m[1], 2, 600);
-
-  // Step size.
   if ((m = text.match(/(?:by|steps?(?:\s+of)?|스텝|단계)\s*(\d{1,3})/)))
     cfg.step = clampRange(+m[1], 1, 60);
   if ((m = text.match(/(\d{1,3})\s*씩/))) cfg.step = clampRange(+m[1], 1, 60);
 
-  // Start & target via markers (allow words in between).
   let startN = null;
   let targetN = null;
   if ((m = text.match(/(\d{1,3})\s*(?:부터|에서)/))) startN = +m[1];
-  else if ((m = text.match(/(?:from|starting(?:\s+at)?)\s+(\d{1,3})/)))
-    startN = +m[1];
-
+  else if ((m = text.match(/(?:from|starting(?:\s+at)?)\s+(\d{1,3})/))) startN = +m[1];
   if ((m = text.match(/(\d{1,3})\s*까지/))) targetN = +m[1];
-  else if ((m = text.match(/(?:up to|\bto\b|\buntil\b|목표)\s*(\d{1,3})/)))
-    targetN = +m[1];
+  else if ((m = text.match(/(?:up to|\bto\b|\buntil\b|목표)\s*(\d{1,3})/))) targetN = +m[1];
 
-  // Adjacent "A to B" fallback fills whichever marker was missing.
   if (startN === null || targetN === null) {
     m = text.match(/(\d{1,3})\s*(?:to|~|–|-|에서|부터)\s*(\d{1,3})/);
     if (m) {
@@ -375,7 +347,6 @@ function parseTrainerConfig(text) {
       if (targetN === null) targetN = +m[2];
     }
   }
-
   if (startN !== null) cfg.start = clampBpm(startN);
   if (targetN !== null) cfg.target = clampBpm(targetN);
   return cfg;
@@ -387,17 +358,13 @@ function startTrainer(cfg) {
   trainer.step = cfg.step;
   trainer.interval = cfg.interval;
   trainer.dir = cfg.target >= cfg.start ? 1 : -1;
-
   ensureAudio();
   setBpm(cfg.start);
   if (!state.isPlaying) start();
-
   speak(`${phraseFor(selectedVoice(), "start")}. ${cfg.start}`);
-
   if (state.bpm === trainer.target) finishTrainer();
   else scheduleNextStep();
 }
-
 function scheduleNextStep() {
   trainer.remaining = trainer.interval;
   renderRamp();
@@ -407,22 +374,15 @@ function scheduleNextStep() {
   }, 1000);
   trainer.stepTimer = setTimeout(stepTrainer, trainer.interval * 1000);
 }
-
 function stepTrainer() {
   clearInterval(trainer.countdown);
-
   let next = state.bpm + trainer.dir * trainer.step;
-  next = trainer.dir > 0
-    ? Math.min(next, trainer.target)
-    : Math.max(next, trainer.target);
-
+  next = trainer.dir > 0 ? Math.min(next, trainer.target) : Math.max(next, trainer.target);
   setBpm(next);
   speakNumber(next);
-
   if (next === trainer.target) finishTrainer();
   else scheduleNextStep();
 }
-
 function finishTrainer() {
   clearTimers();
   trainer.active = false;
@@ -430,49 +390,35 @@ function finishTrainer() {
   el.rampStatus.classList.add("done");
   el.rampStatus.textContent = `✓ ${trainer.target} BPM reached`;
   speak(`${phraseFor(selectedVoice(), "done")}. ${trainer.target}`);
-  // Keep playing at the target tempo; the user stops when ready.
 }
-
 function stopTrainer() {
   clearTimers();
   trainer.active = false;
   el.rampStatus.hidden = true;
   el.rampStatus.classList.remove("done");
 }
-
 function clearTimers() {
   clearTimeout(trainer.stepTimer);
   clearInterval(trainer.countdown);
   trainer.stepTimer = null;
   trainer.countdown = null;
 }
-
 function renderRamp() {
   el.rampStatus.hidden = false;
   el.rampStatus.classList.remove("done");
   const arrow = trainer.dir > 0 ? "↑" : "↓";
   el.rampStatus.textContent =
-    `🎯 ${state.bpm} ${arrow} ${trainer.target} · +${trainer.step}` +
-    ` · next in ${trainer.remaining}s`;
+    `🎯 ${state.bpm} ${arrow} ${trainer.target} · +${trainer.step} · next in ${trainer.remaining}s`;
 }
 
 /* =========================================================================
- * Voice Control — Speech Recognition (Web Speech API)
+ * Voice Control — Speech Recognition
  * ========================================================================= */
-
 const RECOG_LANGS = [
-  ["en-US", "English (US)"],
-  ["en-GB", "English (UK)"],
-  ["ko-KR", "한국어"],
-  ["ja-JP", "日本語"],
-  ["zh-CN", "中文 (简体)"],
-  ["zh-TW", "中文 (繁體)"],
-  ["es-ES", "Español"],
-  ["fr-FR", "Français"],
-  ["de-DE", "Deutsch"],
-  ["it-IT", "Italiano"],
-  ["pt-BR", "Português (BR)"],
-  ["ru-RU", "Русский"],
+  ["en-US", "English (US)"], ["en-GB", "English (UK)"], ["ko-KR", "한국어"],
+  ["ja-JP", "日本語"], ["zh-CN", "中文 (简体)"], ["zh-TW", "中文 (繁體)"],
+  ["es-ES", "Español"], ["fr-FR", "Français"], ["de-DE", "Deutsch"],
+  ["it-IT", "Italiano"], ["pt-BR", "Português (BR)"], ["ru-RU", "Русский"],
   ["hi-IN", "हिन्दी"],
 ];
 
@@ -484,13 +430,14 @@ const KEYWORDS = {
   stop: ["stop", "pause", "halt", "end", "quit", "정지", "멈춰", "그만", "스톱",
     "꺼", "停止", "止め", "停", "暂停", "parar", "detener", "alto", "arrêter",
     "stopp", "ferma", "стоп", "стой"],
-  faster: ["faster", "speed up", "quicker", "빠르게", "빨리", "더 빨리",
-    "速く", "はやく", "快", "快点", "更快", "más rápido", "rapido", "rápido",
+  faster: ["faster", "speed up", "quicker", "빠르게", "빨리", "더 빨리", "速く",
+    "はやく", "快", "快点", "更快", "más rápido", "rapido", "rápido",
     "plus vite", "schneller", "più veloce", "быстрее"],
   slower: ["slower", "slow down", "느리게", "천천히", "더 느리게", "遅く",
     "おそく", "慢", "慢点", "更慢", "más lento", "lento", "plus lent",
     "langsamer", "più lento", "медленнее"],
   tap: ["tap", "탭", "タップ", "点击", "toque", "taper"],
+  subdiv: ["subdivision", "subdivide", "세분", "세분박", "잇단", "分割", "细分"],
   trainer: ["trainer", "train", "ramp", "훈련", "연습", "트레이너", "램프",
     "トレーナー", "練習", "训练", "练习", "entrenador", "entraîneur",
     "trainingsmodus"],
@@ -498,33 +445,43 @@ const KEYWORDS = {
     "réinitialiser", "zurücksetzen"],
 };
 
-const WORD_NUM = {
-  one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8,
-};
+const WORD_NUM = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12 };
 
-/** Extract a beats-per-bar value from "3/4", "waltz", "3박자", etc. */
+/** Numerator-only from word forms / "3박자" / "waltz". Returns 0 if none. */
 function parseBeats(text) {
   if (/waltz|왈츠|walzer|valse/.test(text)) return 3;
-
-  const frac = text.match(/([1-8])\s*[/\s]\s*[1-9]\b/);
-  if (frac) return parseInt(frac[1], 10);
-
   const wordNums = [];
-  const re = /\b(one|two|three|four|five|six|seven|eight)\b/g;
+  const re = /\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b/g;
   let m;
   while ((m = re.exec(text))) wordNums.push(WORD_NUM[m[1]]);
   if (wordNums.length >= 2) return wordNums[0];
-
   const beatKw =
-    /beat|signature|\btime\b|박자|拍子|拍|takt|tiempo|temps|comp[áa]s/.test(
-      text
-    );
+    /beat|signature|\btime\b|박자|拍子|拍|takt|tiempo|temps|comp[áa]s/.test(text);
   if (beatKw) {
-    const dm = text.match(/([1-8])/);
+    const dm = text.match(/(1[0-2]|[1-9])/);
     if (dm) return parseInt(dm[1], 10);
     if (wordNums.length) return wordNums[0];
   }
   return 0;
+}
+
+/**
+ * Full time signature { num, den }. Understands:
+ *  - Korean "N분의 M(박자)" = M/N  (e.g. "8분의 6박자" → 6/8)
+ *  - "M/N", "6/8"
+ *  - "waltz"
+ *  - word/keyword numerator ("three four", "3박자") → /4
+ */
+function parseTimeSignature(text) {
+  let m;
+  if ((m = text.match(/(\d{1,2})\s*분의\s*(\d{1,2})/)))
+    return { num: +m[2], den: +m[1] };
+  if ((m = text.match(/\b([1-9]\d?)\s*\/\s*([1-9]\d?)\b/)))
+    return { num: +m[1], den: +m[2] };
+  if (/waltz|왈츠|walzer|valse/.test(text)) return { num: 3, den: 4 };
+  const beats = parseBeats(text);
+  if (beats) return { num: beats, den: 4 };
+  return null;
 }
 
 let recognition = null;
@@ -533,54 +490,57 @@ let listening = false;
 function matchAny(text, list) {
   return list.some((kw) => text.includes(kw));
 }
-
 function flashCmd(label) {
   el.vcCmd.textContent = label;
   el.vcCmd.classList.remove("flash");
-  void el.vcCmd.offsetWidth; // restart the animation
+  void el.vcCmd.offsetWidth;
   el.vcCmd.classList.add("flash");
 }
 
-/** Interpret a recognized phrase and act on it. */
 function handleTranscript(raw) {
   const text = raw.toLowerCase().trim();
   el.vcHeard.textContent = "“" + raw.trim() + "”";
 
-  // Reset tempo + time signature.
   if (matchAny(text, KEYWORDS.reset)) {
     stopTrainer();
     setBpm(120);
-    setBeatsPerBar(4);
-    flashCmd("Reset · 120 · 4 beats");
+    setTimeSignature(4, 4);
+    setSubdiv(1);
+    flashCmd("Reset");
     return;
   }
 
-  // Speed ramp — checked before number/beat parsing so its numbers aren't
-  // mistaken for a tempo or time signature.
   if (isRampPhrase(text)) {
     const hasNums = /\d{2,3}/.test(text);
-    // A bare "trainer"/"ramp" with no numbers toggles a running ramp off.
     if (!hasNums && trainer.active) {
       stopTrainer();
       flashCmd("Ramp ■");
       return;
     }
     const cfg = parseTrainerConfig(text);
-    if (trainer.active) stopTrainer(); // restart with the new settings
+    if (trainer.active) stopTrainer();
     startTrainer(cfg);
     flashCmd(`Ramp ▶ ${cfg.start}→${cfg.target}`);
     return;
   }
 
-  // Time signature — "3/4", "6/8", "waltz", "3박자", "beats 3".
-  const beats = parseBeats(text);
-  if (beats) {
-    setBeatsPerBar(beats);
-    flashCmd("Time · " + beats + " beats/bar");
+  // Subdivision — "subdivision 2", "세분박 3".
+  if (matchAny(text, KEYWORDS.subdiv)) {
+    const m = text.match(/([1-4])/);
+    setSubdiv(m ? +m[1] : (state.subdiv % 4) + 1);
+    flashCmd("Sub · " + state.subdiv);
     return;
   }
 
-  // A spoken number (2–3 digits) sets the tempo directly.
+  // Time signature — "6/8", "8분의 6박자", "three four", "waltz".
+  const ts = parseTimeSignature(text);
+  if (ts) {
+    setTimeSignature(ts.num, ts.den);
+    flashCmd("Time · " + state.numerator + "/" + state.denominator);
+    return;
+  }
+
+  // Spoken number → tempo.
   const num = text.match(/\d{2,3}/);
   if (num) {
     const n = parseInt(num[0], 10);
@@ -593,7 +553,7 @@ function handleTranscript(raw) {
     }
   }
 
-  // Tempo by marking name — "presto", "안단테", "allegro", …
+  // Tempo by marking name.
   const term = parseTempoTerm(text);
   if (term) {
     stopTrainer();
@@ -630,8 +590,7 @@ function handleTranscript(raw) {
     flashCmd("Play");
     return;
   }
-
-  flashCmd("—"); // heard something, but no command matched
+  flashCmd("—");
 }
 
 function populateRecogLangs() {
@@ -643,9 +602,7 @@ function populateRecogLangs() {
   });
   const bl = (navigator.language || "en-US").toLowerCase();
   const exact = RECOG_LANGS.find(([c]) => c.toLowerCase() === bl);
-  const loose = RECOG_LANGS.find(([c]) =>
-    c.toLowerCase().startsWith(bl.split("-")[0])
-  );
+  const loose = RECOG_LANGS.find(([c]) => c.toLowerCase().startsWith(bl.split("-")[0]));
   if (exact) el.vcLang.value = exact[0];
   else if (loose) el.vcLang.value = loose[0];
 }
@@ -660,16 +617,13 @@ function initRecognition() {
     el.vcLang.disabled = true;
     return;
   }
-
   recognition = new SR();
   recognition.continuous = true;
   recognition.interimResults = false;
-
   recognition.onresult = (e) => {
     const result = e.results[e.results.length - 1];
     if (result.isFinal) handleTranscript(result[0].transcript);
   };
-
   recognition.onerror = (e) => {
     if (e.error === "not-allowed" || e.error === "service-not-allowed") {
       listening = false;
@@ -678,14 +632,11 @@ function initRecognition() {
         '<span class="vc-unsupported">Microphone permission denied.</span>';
     }
   };
-
   recognition.onend = () => {
     if (listening) {
       try {
         recognition.start();
-      } catch (_) {
-        /* already starting */
-      }
+      } catch (_) {}
     }
   };
 }
@@ -693,13 +644,9 @@ function initRecognition() {
 function setMicUI(on) {
   el.micBtn.classList.toggle("listening", on);
   el.micBtn.textContent = on ? "🛑 Stop Listening" : "🎤 Start Listening";
-  if (on) {
-    el.vcHeard.textContent = "Listening… say a command";
-  } else if (!el.vcHeard.querySelector(".vc-unsupported")) {
-    el.vcHeard.textContent = "Mic off";
-  }
+  if (on) el.vcHeard.textContent = "Listening… say a command";
+  else if (!el.vcHeard.querySelector(".vc-unsupported")) el.vcHeard.textContent = "Mic off";
 }
-
 function startListening() {
   if (!recognition) return;
   ensureAudio();
@@ -707,59 +654,109 @@ function startListening() {
   listening = true;
   try {
     recognition.start();
-  } catch (_) {
-    /* already running */
-  }
+  } catch (_) {}
   setMicUI(true);
 }
-
 function stopListening() {
   listening = false;
   if (recognition) recognition.stop();
   setMicUI(false);
 }
-
 function toggleListening() {
   listening ? stopListening() : startListening();
 }
 
 /* =========================================================================
+ * Rotary dial interaction
+ * ========================================================================= */
+let dragging = false;
+let lastAngle = 0;
+let angleAccum = 0;
+const DEG_PER_BPM = 3; // dial sensitivity
+
+function angleAt(e) {
+  const r = el.dial.getBoundingClientRect();
+  const cx = r.left + r.width / 2;
+  const cy = r.top + r.height / 2;
+  return (Math.atan2(e.clientY - cy, e.clientX - cx) * 180) / Math.PI;
+}
+function onDialDown(e) {
+  dragging = true;
+  angleAccum = 0;
+  lastAngle = angleAt(e);
+  el.dial.setPointerCapture(e.pointerId);
+  el.dial.classList.add("turning");
+}
+function onDialMove(e) {
+  if (!dragging) return;
+  const a = angleAt(e);
+  let d = a - lastAngle;
+  if (d > 180) d -= 360;
+  if (d < -180) d += 360;
+  lastAngle = a;
+  angleAccum += d;
+  const steps = Math.trunc(angleAccum / DEG_PER_BPM);
+  if (steps) {
+    angleAccum -= steps * DEG_PER_BPM;
+    if (trainer.active) stopTrainer();
+    setBpm(state.bpm + steps);
+  }
+}
+function onDialUp() {
+  dragging = false;
+  el.dial.classList.remove("turning");
+}
+
+/* =========================================================================
  * Events
  * ========================================================================= */
+el.dial.addEventListener("pointerdown", onDialDown);
+el.dial.addEventListener("pointermove", onDialMove);
+el.dial.addEventListener("pointerup", onDialUp);
+el.dial.addEventListener("pointercancel", onDialUp);
 
-el.slider.addEventListener("input", (e) => {
-  if (trainer.active) stopTrainer(); // manual override cancels the ramp
-  setBpm(Number(e.target.value));
+el.dialCenter.addEventListener("pointerdown", (e) => {
+  e.stopPropagation(); // don't start a dial drag
+});
+el.dialCenter.addEventListener("click", (e) => {
+  e.stopPropagation();
+  toggle();
 });
 
-document.querySelectorAll(".nudge-btn").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    if (trainer.active) stopTrainer();
-    setBpm(state.bpm + Number(btn.dataset.delta));
-  });
+el.arrowUp.addEventListener("click", (e) => {
+  e.stopPropagation();
+  if (trainer.active) stopTrainer();
+  setBpm(state.bpm + 1);
 });
-
-el.beatsPerBar.addEventListener("change", (e) => {
-  setBeatsPerBar(Number(e.target.value));
+el.arrowDown.addEventListener("click", (e) => {
+  e.stopPropagation();
+  if (trainer.active) stopTrainer();
+  setBpm(state.bpm - 1);
 });
+el.arrowUp.addEventListener("pointerdown", (e) => e.stopPropagation());
+el.arrowDown.addEventListener("pointerdown", (e) => e.stopPropagation());
 
-el.startBtn.addEventListener("click", toggle);
 el.tapBtn.addEventListener("click", tap);
+el.tsBtn.addEventListener("click", cycleTimeSignature);
+el.tsValue.addEventListener("click", cycleTimeSignature);
+el.subValue.addEventListener("click", cycleSubdiv);
 
 el.micBtn.addEventListener("click", toggleListening);
 el.vcLang.addEventListener("change", () => {
-  if (listening && recognition) recognition.stop(); // onend restarts with new lang
+  if (listening && recognition) recognition.stop();
 });
 
-el.voiceToggle.addEventListener("click", () => {
+function toggleVoicePanel() {
   const collapsed = el.voicePanel.classList.toggle("collapsed");
   el.voiceToggle.setAttribute("aria-expanded", String(!collapsed));
-});
+  if (!collapsed) el.voicePanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+el.voiceToggle.addEventListener("click", toggleVoicePanel);
+el.settingsBtn.addEventListener("click", toggleVoicePanel);
 
 document.addEventListener("keydown", (e) => {
   const tag = e.target.tagName;
   if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
-
   if (e.code === "Space") {
     e.preventDefault();
     toggle();
@@ -770,20 +767,16 @@ document.addEventListener("keydown", (e) => {
 });
 
 // --- Init ---
-buildBeatDots();
+buildBeats();
 setBpm(120);
+setTimeSignature(4, 4);
+setSubdiv(1);
 loadVoices();
-if ("speechSynthesis" in window) {
-  window.speechSynthesis.onvoiceschanged = loadVoices;
-}
+if ("speechSynthesis" in window) window.speechSynthesis.onvoiceschanged = loadVoices;
 populateRecogLangs();
 initRecognition();
-
-// Always-on: begin listening as soon as the page loads so the app can be
-// controlled entirely by voice. The browser asks for mic permission once.
 startListening();
 
-// Audio playback needs one user gesture to unlock. Any tap or key press does it.
 function unlockAudioOnce() {
   ensureAudio();
   window.removeEventListener("pointerdown", unlockAudioOnce);
@@ -792,51 +785,34 @@ function unlockAudioOnce() {
 window.addEventListener("pointerdown", unlockAudioOnce);
 window.addEventListener("keydown", unlockAudioOnce);
 
-// Register the service worker so the app is installable and works offline.
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("sw.js").catch(() => {});
   });
 }
 
-/* =========================================================================
- * Auto-update: reload as soon as a new version is deployed.
- *
- * version.json carries a build stamp that changes on every deploy. We record
- * it on load, then re-check when the app regains focus and on a short timer;
- * if the deployed build differs from the running one, the page reloads and the
- * network-first service worker serves the fresh files.
- * ========================================================================= */
+/* Auto-update: reload when a new version is deployed. */
 let loadedBuild = null;
-
 async function checkForUpdate() {
   try {
-    const res = await fetch("version.json?_=" + Date.now(), {
-      cache: "no-store",
-    });
+    const res = await fetch("version.json?_=" + Date.now(), { cache: "no-store" });
     if (!res.ok) return;
     const { build } = await res.json();
     if (!build) return;
     if (loadedBuild === null) {
-      loadedBuild = build; // first read — remember the running version
+      loadedBuild = build;
       return;
     }
     if (build !== loadedBuild) {
       loadedBuild = build;
-      // Nudge the service worker to pick up its new version too, then reload.
       try {
         const reg = await navigator.serviceWorker.getRegistration();
         if (reg) await reg.update();
-      } catch (_) {
-        /* ignore */
-      }
+      } catch (_) {}
       window.location.reload();
     }
-  } catch (_) {
-    /* offline or blocked — try again next time */
-  }
+  } catch (_) {}
 }
-
 checkForUpdate();
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") checkForUpdate();
