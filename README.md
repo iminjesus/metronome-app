@@ -36,6 +36,7 @@ loosely, in the selected language:
 | "subdivision 2" / "세분박 3" | Set the beat subdivision (1–4) |
 | "tap" | Tap tempo |
 | "50 to 150" / "from 50 up to 150 by 10 every 30" / "50부터 시작해서 150까지 10씩 30초마다" | Start a speed ramp — just name a start and target however you like (extra parts optional; "trainer" alone = 50 → 150, +10 / 30s). "stop" ends it. |
+| while ramping: "every 7 seconds" / "매 7초만" / "8씩" / "200까지" | Adjust one part of the running ramp in place, keeping the rest |
 | "reset" / "리셋" | Back to 120 BPM, 4 beats |
 
 > **Browser:** speech recognition uses the Web Speech API, which currently works

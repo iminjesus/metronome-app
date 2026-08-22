@@ -306,6 +306,64 @@ function parseTrainerConfig(text) {
   if (targetN !== null) cfg.target = clampBpm(targetN);
   return cfg;
 }
+/**
+ * While a ramp is running, pull out only the fields the user re-stated —
+ * e.g. "매 7초만" → { interval: 7 }, "8씩" → { step: 8 }, "200까지" →
+ * { target: 200 }. Returns { changed:false } if nothing ramp-related is found.
+ */
+function parseRampAdjustment(text) {
+  const out = { changed: false };
+  let m;
+  if ((m = text.match(/(?:every|각|매|마다|간격)\s*(\d{1,3})/)) ||
+      (m = text.match(/(\d{1,3})\s*(?:초|secs?|seconds?)/))) {
+    out.interval = clampRange(+m[1], 2, 600);
+    out.changed = true;
+  }
+  if ((m = text.match(/(?:by|steps?(?:\s+of)?|스텝|단계)\s*(\d{1,3})/)) ||
+      (m = text.match(/(\d{1,3})\s*씩/))) {
+    out.step = clampRange(+m[1], 1, 60);
+    out.changed = true;
+  }
+  if ((m = text.match(/(\d{1,3})\s*까지/)) ||
+      (m = text.match(/(?:up to|\bto\b|\buntil\b|목표)\s*(\d{1,3})/))) {
+    out.target = clampBpm(+m[1]);
+    out.changed = true;
+  }
+  return out;
+}
+
+/** Apply a partial change to the running ramp without restarting it. */
+function applyRampAdjustment(adj) {
+  const labels = [];
+  if (adj.target !== undefined) {
+    trainer.target = adj.target;
+    trainer.dir = trainer.target >= state.bpm ? 1 : -1;
+    labels.push("→" + adj.target);
+  }
+  if (adj.step !== undefined) {
+    trainer.step = adj.step;
+    labels.push("+" + adj.step);
+  }
+  if (adj.interval !== undefined) {
+    trainer.interval = adj.interval;
+    labels.push(adj.interval + "s");
+  }
+  // If the (possibly new) target is already met, finish; otherwise keep going.
+  const reached =
+    (trainer.dir > 0 && state.bpm >= trainer.target) ||
+    (trainer.dir < 0 && state.bpm <= trainer.target);
+  if (reached) {
+    finishTrainer();
+  } else if (adj.interval !== undefined) {
+    // Restart the countdown so the new interval takes effect right away.
+    clearTimers();
+    scheduleNextStep();
+  } else {
+    renderRamp(); // refresh status with the new step / target
+  }
+  return labels;
+}
+
 function startTrainer(cfg) {
   trainer.active = true;
   trainer.target = cfg.target;
@@ -445,6 +503,23 @@ function handleTranscript(raw) {
     flashCmd("Reset");
     return;
   }
+  // Live tweak of a RUNNING ramp: re-state just one part and it changes in
+  // place — e.g. "매 7초만", "8씩", "200까지" — as long as no new start is given.
+  if (trainer.active) {
+    const hasStart =
+      /(\d{1,3})\s*(?:부터|에서)/.test(text) ||
+      /\b(?:from|starting)\b/.test(text) ||
+      /(\d{1,3})\s*(?:to|~|–|-|에서|부터)\s*(\d{1,3})/.test(text);
+    if (!hasStart) {
+      const adj = parseRampAdjustment(text);
+      if (adj.changed) {
+        const labels = applyRampAdjustment(adj);
+        flashCmd("Ramp · " + labels.join(" "));
+        return;
+      }
+    }
+  }
+
   if (isRampPhrase(text)) {
     const hasNums = /\d{2,3}/.test(text);
     if (!hasNums && trainer.active) {
