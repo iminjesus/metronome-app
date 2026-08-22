@@ -686,7 +686,10 @@ function wordsToNum(tokens) {
 // are English so the colloquial-hundreds logic still applies ("one fifty" →
 // 150). Keys are foreign loanwords that don't collide with Korean command words.
 const HANGUL_EN = {
-  원: "one", 투: "two", 쓰리: "three", 트리: "three", 포: "four", 훠: "four",
+  // Single-syllable readings (원/투/포…) are intentionally omitted: they
+  // collide with common Korean words (템포, 원래, 투자). Korean numbers are
+  // handled by the Sino-Korean pass instead.
+  쓰리: "three", 트리: "three",
   파이브: "five", 식스티: "sixty", 식스: "six", 세븐티: "seventy",
   세븐: "seven", 에이티: "eighty", 에잇: "eight", 에이트: "eight",
   나인티: "ninety", 나인: "nine", 텐: "ten", 일레븐: "eleven",
@@ -700,7 +703,25 @@ const HANGUL_EN_RE = new RegExp(
   "g"
 );
 
-/** Normalize spoken numbers (English words + Korean loanword spellings) to digits. */
+// Sino-Korean numerals (native metronome range) → value. No 천(1000): tempos
+// never reach it and it collides with common words (천천히, 천장…).
+const SINO = {
+  영: 0, 공: 0, 일: 1, 이: 2, 삼: 3, 사: 4, 오: 5, 육: 6, 륙: 6,
+  칠: 7, 팔: 8, 구: 9, 십: 10, 백: 100,
+};
+function sinoToNum(s) {
+  let total = 0;
+  let cur = 0;
+  for (const ch of s) {
+    const v = SINO[ch];
+    if (v == null) return null;
+    if (v >= 10) { total += (cur || 1) * v; cur = 0; }
+    else cur = v;
+  }
+  return total + cur;
+}
+
+/** Normalize spoken numbers (English words + Korean spellings) to digits. */
 function normalizeNumbers(text) {
   // Loanword hangul → English words (space-padded so concatenations split).
   let t = text.replace(HANGUL_EN_RE, (m) => " " + HANGUL_EN[m] + " ");
@@ -710,11 +731,23 @@ function normalizeNumbers(text) {
     const n = wordsToNum(toks);
     return Number.isFinite(n) ? String(n) : m;
   });
+  // Sino-Korean numbers — only a whole token containing a place digit
+  // (십/백) and bounded by a space/particle, so words like "천천히" or the
+  // "이 템포" hold command are never corrupted.
+  t = t.replace(
+    /(^|\s)([영공일이삼사오육륙칠팔구십백]+)(?=$|\s|부터|에서|까지|씩|초|으로|로|템포|비피엠|bpm)/g,
+    (m, pre, run) => {
+      if (!/[십백]/.test(run)) return m;
+      const n = sinoToNum(run);
+      return n != null && n >= 1 ? pre + n : m;
+    }
+  );
   return t;
 }
 
 let recognition = null;
 let listening = false;
+let recogRunning = false;
 function matchAny(text, list) {
   return list.some((kw) => text.includes(kw));
 }
@@ -913,8 +946,12 @@ function initRecognition() {
         '<span class="vc-unsupported">Microphone permission denied.</span>';
     }
   };
+  recognition.onstart = () => {
+    recogRunning = true;
+  };
   recognition.onend = () => {
-    if (listening) {
+    recogRunning = false;
+    if (listening && !tunerActive) {
       try {
         recognition.start();
       } catch (_) {}
@@ -1194,16 +1231,17 @@ function unlockAudioOnce() {
   if (recognition && !tunerActive) {
     listening = true;
     setMicUI(true);
-    try {
-      recognition.stop();
-    } catch (_) {}
-    setTimeout(() => {
-      if (listening && !tunerActive) {
-        try {
-          recognition.start();
-        } catch (_) {}
-      }
-    }, 300);
+    // A single clean restart behind a real gesture — recreate the session if
+    // it's running (the load-time one is often dead), else just start it.
+    if (recogRunning) {
+      try {
+        recognition.stop(); // onend restarts it exactly once
+      } catch (_) {}
+    } else {
+      try {
+        recognition.start();
+      } catch (_) {}
+    }
   }
   window.removeEventListener("pointerdown", unlockAudioOnce, true);
   window.removeEventListener("keydown", unlockAudioOnce, true);
