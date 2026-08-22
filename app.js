@@ -1188,11 +1188,30 @@ startListening();
 
 function unlockAudioOnce() {
   ensureAudio();
-  window.removeEventListener("pointerdown", unlockAudioOnce);
-  window.removeEventListener("keydown", unlockAudioOnce);
+  // The auto-start on load is flaky on mobile until there's a real user
+  // gesture (you'd otherwise have to toggle the mic once to get it going).
+  // On the first interaction, give recognition a clean, gesture-backed restart.
+  if (recognition && !tunerActive) {
+    listening = true;
+    setMicUI(true);
+    try {
+      recognition.stop();
+    } catch (_) {}
+    setTimeout(() => {
+      if (listening && !tunerActive) {
+        try {
+          recognition.start();
+        } catch (_) {}
+      }
+    }, 300);
+  }
+  window.removeEventListener("pointerdown", unlockAudioOnce, true);
+  window.removeEventListener("keydown", unlockAudioOnce, true);
 }
-window.addEventListener("pointerdown", unlockAudioOnce);
-window.addEventListener("keydown", unlockAudioOnce);
+// Capture phase, so it runs before any inner handler that calls
+// stopPropagation (e.g. tapping the wheel's center start/stop button).
+window.addEventListener("pointerdown", unlockAudioOnce, true);
+window.addEventListener("keydown", unlockAudioOnce, true);
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
