@@ -29,6 +29,7 @@ loosely, in the selected language:
 | "faster" / "빠르게" | +5 BPM |
 | "slower" / "느리게" | −5 BPM |
 | a number, e.g. "120" | Set the tempo |
+| "presto" / "andante" / "allegro" / "안단테" … | Set the tempo by its Italian marking |
 | "three four" / "6/8" / "waltz" / "3박자" | Change the time signature |
 | "tap" | Tap tempo |
 | "50 to 150" / "from 50 up to 150 by 10 every 30" / "50부터 시작해서 150까지 10씩 30초마다" | Start a speed ramp — just name a start and target however you like (extra parts optional; "trainer" alone = 50 → 150, +10 / 30s). "stop" ends it. |

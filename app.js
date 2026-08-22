@@ -32,6 +32,30 @@ function tempoName(bpm) {
   return "";
 }
 
+// Spoken tempo markings → a representative BPM inside that marking's range.
+// More specific names come first so "presto" doesn't shadow "prestissimo".
+const TEMPO_TERMS = [
+  { bpm: 38, names: ["grave", "그라베"] },
+  { bpm: 210, names: ["prestissimo", "프레스티시모", "프레스티시오"] },
+  { bpm: 188, names: ["presto", "프레스토"] },
+  { bpm: 166, names: ["vivace", "비바체"] },
+  { bpm: 138, names: ["allegretto", "알레그레토", "알레그레또"] },
+  { bpm: 138, names: ["allegro", "알레그로"] },
+  { bpm: 114, names: ["moderato", "모데라토"] },
+  { bpm: 92, names: ["andante", "안단테", "안단떼"] },
+  { bpm: 70, names: ["adagio", "아다지오", "아다지어"] },
+  { bpm: 63, names: ["larghetto", "라르게토", "라르게또"] },
+  { bpm: 50, names: ["largo", "라르고"] },
+];
+
+/** Return the BPM for a spoken tempo marking, or 0 if none is mentioned. */
+function parseTempoTerm(text) {
+  for (const t of TEMPO_TERMS) {
+    if (t.names.some((n) => text.includes(n))) return t.bpm;
+  }
+  return 0;
+}
+
 const BPM_MIN = 30;
 const BPM_MAX = 240;
 const clampBpm = (n) => Math.max(BPM_MIN, Math.min(BPM_MAX, Math.round(n)));
@@ -567,6 +591,16 @@ function handleTranscript(raw) {
       flashCmd("→ " + n + " BPM");
       return;
     }
+  }
+
+  // Tempo by marking name — "presto", "안단테", "allegro", …
+  const term = parseTempoTerm(text);
+  if (term) {
+    stopTrainer();
+    setBpm(term);
+    if (!state.isPlaying) start();
+    flashCmd(tempoName(term) + " · " + term);
+    return;
   }
 
   if (matchAny(text, KEYWORDS.faster)) {
