@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <meta name="theme-color" content="#111013" />
+  <meta name="theme-color" content="#0f1115" />
   <title>Metronome</title>
 
   <!-- PWA / installable app -->
@@ -18,58 +18,64 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <main class="device">
-    <!-- Header -->
-    <header class="topbar">
-      <span class="brand">Metronome</span>
-      <button id="settingsBtn" class="icon-btn" aria-label="Voice control settings">🎤</button>
-    </header>
+  <main class="app">
+    <h1 class="title">Metronome</h1>
 
-    <!-- LCD display -->
-    <section class="lcd">
-      <div class="lcd-row lcd-labels">
-        <span>TEMPO</span>
-        <span>T.S.</span>
-        <span>SUB DIV.</span>
+    <!-- Visual beat indicator -->
+    <div class="beats" id="beats" aria-hidden="true"></div>
+
+    <!-- BPM display -->
+    <div class="bpm">
+      <span class="bpm-value" id="bpmValue">120</span>
+      <span class="bpm-label">BPM</span>
+    </div>
+    <div class="tempo-name" id="tempoName">Moderato</div>
+
+    <!-- iPod-style click wheel: drag around it to change tempo -->
+    <div class="wheel-wrap">
+      <div class="wheel" id="dial" role="slider" aria-label="Tempo wheel"
+           aria-valuemin="30" aria-valuemax="240" tabindex="0">
+        <div class="wheel-ticks"></div>
+        <div class="knob" id="knob"><span class="knob-dot"></span></div>
+        <button class="wheel-center" id="dialCenter" aria-label="Start or stop"></button>
       </div>
-      <div class="lcd-row lcd-values">
-        <div class="tempo-block">
-          <span class="note">♩</span>
-          <span class="bpm-value" id="bpmValue">120</span>
-          <span class="tempo-name" id="tempoName">Moderato</span>
-        </div>
-        <button class="ts-value" id="tsValue" aria-label="Change time signature">4/4</button>
-        <button class="sub-value" id="subValue" aria-label="Change subdivision">♩</button>
-      </div>
-      <!-- Beat indicator -->
-      <div class="beats" id="beats" aria-hidden="true"></div>
-    </section>
+    </div>
+
+    <!-- Fine tune buttons -->
+    <div class="row nudge">
+      <button class="nudge-btn" data-delta="-5" aria-label="Decrease 5 BPM">−5</button>
+      <button class="nudge-btn" data-delta="-1" aria-label="Decrease 1 BPM">−1</button>
+      <button class="nudge-btn" data-delta="1" aria-label="Increase 1 BPM">+1</button>
+      <button class="nudge-btn" data-delta="5" aria-label="Increase 5 BPM">+5</button>
+    </div>
+
+    <!-- Time signature -->
+    <div class="row signature">
+      <label for="beatsPerBar">Beats per bar</label>
+      <select id="beatsPerBar" aria-label="Beats per bar">
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4" selected>4</option>
+        <option value="5">5</option>
+        <option value="6">6</option>
+        <option value="7">7</option>
+        <option value="8">8</option>
+      </select>
+    </div>
+
+    <!-- Controls -->
+    <div class="row controls">
+      <button id="tapBtn" class="btn btn-secondary" aria-label="Tap tempo">Tap</button>
+      <button id="startBtn" class="btn btn-primary" aria-label="Start or stop">Start</button>
+    </div>
+
+    <p class="hint">Turn the wheel for tempo · <kbd>Space</kbd> start/stop · <kbd>T</kbd> tap</p>
 
     <!-- Speed ramp status (voice-started) -->
     <div class="ramp-status" id="rampStatus" hidden></div>
 
-    <!-- Rotary dial -->
-    <section class="dial-wrap">
-      <div class="dial" id="dial" role="slider" aria-label="Tempo dial" aria-valuemin="30" aria-valuemax="240">
-        <div class="dial-ring"></div>
-        <div class="dial-face">
-          <div class="knob" id="knob"><span class="knob-mark"></span></div>
-          <button class="arrow arrow-down" id="arrowDown" aria-label="Slower">‹</button>
-          <button class="arrow arrow-up" id="arrowUp" aria-label="Faster">›</button>
-          <button class="dial-center" id="dialCenter" aria-label="Start or stop"></button>
-        </div>
-      </div>
-    </section>
-
-    <!-- Bottom controls -->
-    <section class="bottom">
-      <button class="pad-btn" id="tsBtn" aria-label="Time signature">4/4</button>
-      <button class="pad-btn" id="tapBtn" aria-label="Tap tempo">TAP</button>
-    </section>
-
-    <p class="hint"><kbd>Space</kbd> start/stop · <kbd>T</kbd> tap · turn the dial for tempo</p>
-
-    <!-- Voice Control (toggled by the 🎤 button) -->
+    <!-- Voice Control -->
     <section class="panel collapsed" id="voicePanel">
       <button class="panel-head" id="voiceToggle" aria-expanded="false">
         <span>🎤 Voice Control</span>

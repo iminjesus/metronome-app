@@ -5,8 +5,8 @@
  * fires often but only schedules audio that falls inside a short window, so
  * click timing rides the sample-accurate audio clock, not the JS timer.
  *
- * Controls: a rotary dial, tap tempo, time-signature & subdivision, plus
- * hands-free voice control (including a spoken speed ramp).
+ * Tempo is set with an iPod-style click wheel (drag around it), the ± buttons,
+ * tap tempo, or hands-free voice control (including a spoken speed ramp).
  */
 
 // --- Tempo naming (traditional Italian markings) ---
@@ -15,14 +15,12 @@ const TEMPO_NAMES = [
   [108, "Andante"], [121, "Moderato"], [156, "Allegro"], [176, "Vivace"],
   [200, "Presto"], [Infinity, "Prestissimo"],
 ];
-
 function tempoName(bpm) {
   for (const [max, name] of TEMPO_NAMES) if (bpm < max) return name;
   return "";
 }
 
 // Spoken tempo markings → a representative BPM inside that marking's range.
-// More specific names first so "presto" doesn't shadow "prestissimo".
 const TEMPO_TERMS = [
   { bpm: 38, names: ["grave", "그라베"] },
   { bpm: 210, names: ["prestissimo", "프레스티시모", "프레스티시오"] },
@@ -36,7 +34,6 @@ const TEMPO_TERMS = [
   { bpm: 63, names: ["larghetto", "라르게토", "라르게또"] },
   { bpm: 50, names: ["largo", "라르고"] },
 ];
-
 function parseTempoTerm(text) {
   for (const t of TEMPO_TERMS) if (t.names.some((n) => text.includes(n))) return t.bpm;
   return 0;
@@ -47,7 +44,6 @@ const BPM_MAX = 240;
 const clampBpm = (n) => Math.max(BPM_MIN, Math.min(BPM_MAX, Math.round(n)));
 const clampRange = (n, lo, hi) => Math.max(lo, Math.min(hi, Math.round(n)));
 const VALID_DEN = [1, 2, 4, 8, 16, 32];
-const SUBDIV_GLYPH = { 1: "♩", 2: "♫", 3: "♪³", 4: "♬" };
 
 // --- State ---
 const state = {
@@ -72,19 +68,14 @@ const notesInQueue = [];
 const el = {
   bpmValue: document.getElementById("bpmValue"),
   tempoName: document.getElementById("tempoName"),
-  tsValue: document.getElementById("tsValue"),
-  subValue: document.getElementById("subValue"),
   beats: document.getElementById("beats"),
+  beatsPerBar: document.getElementById("beatsPerBar"),
+  startBtn: document.getElementById("startBtn"),
+  tapBtn: document.getElementById("tapBtn"),
   dial: document.getElementById("dial"),
   knob: document.getElementById("knob"),
   dialCenter: document.getElementById("dialCenter"),
-  arrowUp: document.getElementById("arrowUp"),
-  arrowDown: document.getElementById("arrowDown"),
-  tsBtn: document.getElementById("tsBtn"),
-  tapBtn: document.getElementById("tapBtn"),
   rampStatus: document.getElementById("rampStatus"),
-  settingsBtn: document.getElementById("settingsBtn"),
-  // Voice Control
   voicePanel: document.getElementById("voicePanel"),
   voiceToggle: document.getElementById("voiceToggle"),
   micBtn: document.getElementById("micBtn"),
@@ -99,26 +90,21 @@ function ensureAudio() {
   if (audioCtx.state === "suspended") audioCtx.resume();
 }
 
-/** Schedule a click. sub===0 is a main beat (accented on beat 0); else a subdivision. */
 function scheduleClick(beat, sub, time) {
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
   const isMain = sub === 0;
   const isAccent = isMain && beat === 0;
-
   osc.frequency.value = isAccent ? 1500 : isMain ? 1000 : 1300;
   const peak = isAccent ? 0.6 : isMain ? 0.4 : 0.18;
   const dur = isMain ? 0.05 : 0.03;
-
   gain.gain.setValueAtTime(0.0001, time);
   gain.gain.exponentialRampToValueAtTime(peak, time + 0.001);
   gain.gain.exponentialRampToValueAtTime(0.0001, time + dur);
-
   osc.connect(gain);
   gain.connect(audioCtx.destination);
   osc.start(time);
   osc.stop(time + 0.06);
-
   notesInQueue.push({ beat, sub, time });
 }
 
@@ -138,7 +124,6 @@ function scheduler() {
   }
 }
 
-// --- Visual sync ---
 function drawLoop() {
   if (!state.isPlaying) return;
   const now = audioCtx.currentTime;
@@ -169,19 +154,21 @@ function start() {
   notesInQueue.length = 0;
   schedulerTimer = setInterval(scheduler, LOOKAHEAD_MS);
   requestAnimationFrame(drawLoop);
+  el.startBtn.textContent = "Stop";
+  el.startBtn.classList.add("playing");
   el.dialCenter.classList.add("playing");
 }
-
 function stop() {
   state.isPlaying = false;
   clearInterval(schedulerTimer);
   schedulerTimer = null;
   notesInQueue.length = 0;
   for (const dot of el.beats.children) dot.classList.remove("active", "accent");
+  el.startBtn.textContent = "Start";
+  el.startBtn.classList.remove("playing");
   el.dialCenter.classList.remove("playing");
   if (trainer.active) stopTrainer();
 }
-
 function toggle() {
   state.isPlaying ? stop() : start();
 }
@@ -191,10 +178,6 @@ function setBpm(bpm) {
   state.bpm = clampBpm(bpm);
   el.bpmValue.textContent = state.bpm;
   el.tempoName.textContent = tempoName(state.bpm);
-  updateKnob();
-}
-
-function updateKnob() {
   const frac = (state.bpm - BPM_MIN) / (BPM_MAX - BPM_MIN);
   el.knob.style.transform = "rotate(" + (frac * 270 - 135) + "deg)";
 }
@@ -214,29 +197,14 @@ function setTimeSignature(num, den) {
   state.denominator = VALID_DEN.includes(den) ? den : 4;
   state.currentBeat = 0;
   state.currentSub = 0;
-  const label = state.numerator + "/" + state.denominator;
-  el.tsValue.textContent = label;
-  el.tsBtn.textContent = label;
+  // Reflect the numerator in the dropdown when it has a matching option.
+  const opt = [...el.beatsPerBar.options].find((o) => +o.value === state.numerator);
+  if (opt) el.beatsPerBar.value = String(state.numerator);
   buildBeats();
-}
-
-const TS_PRESETS = [
-  [4, 4], [3, 4], [2, 4], [6, 8], [5, 4], [7, 8], [9, 8], [12, 8], [2, 2],
-];
-function cycleTimeSignature() {
-  const i = TS_PRESETS.findIndex(
-    ([n, d]) => n === state.numerator && d === state.denominator
-  );
-  const [n, d] = TS_PRESETS[(i + 1) % TS_PRESETS.length];
-  setTimeSignature(n, d);
 }
 
 function setSubdiv(n) {
   state.subdiv = Math.max(1, Math.min(4, Math.round(n)));
-  el.subValue.textContent = SUBDIV_GLYPH[state.subdiv];
-}
-function cycleSubdiv() {
-  setSubdiv((state.subdiv % 4) + 1);
 }
 
 // --- Tap tempo ---
@@ -253,9 +221,7 @@ function tap() {
   }
 }
 
-/* =========================================================================
- * Voice announcements (TTS) — voice follows the recognition language.
- * ========================================================================= */
+/* ===== Voice announcements (TTS) ===== */
 let voices = [];
 const PHRASES = {
   en: { start: "Start", done: "Target reached" },
@@ -269,7 +235,6 @@ const PHRASES = {
   pt: { start: "Começar", done: "Objetivo alcançado" },
   ru: { start: "Старт", done: "Цель достигнута" },
 };
-
 function loadVoices() {
   if ("speechSynthesis" in window) voices = window.speechSynthesis.getVoices();
 }
@@ -302,44 +267,34 @@ function speakNumber(n) {
   speak(String(n));
 }
 
-/* =========================================================================
- * Speed ramp — started and configured by voice.
- * ========================================================================= */
+/* ===== Speed ramp (voice) ===== */
 const trainer = {
   active: false, target: 150, step: 10, interval: 30, dir: 1,
   stepTimer: null, countdown: null, remaining: 0,
 };
-
 function isRampPhrase(text) {
   if (matchAny(text, KEYWORDS.trainer)) return true;
   if (/(\d{1,3})\s*(?:to|~|–|-|에서|부터)\s*(\d{1,3})/.test(text)) return true;
   const hasStart =
     /(\d{1,3})\s*(?:부터|에서)/.test(text) || /\b(?:from|starting)\b/.test(text);
-  const hasTarget =
-    /(\d{1,3})\s*까지/.test(text) || /\b(?:to|until)\b/.test(text);
+  const hasTarget = /(\d{1,3})\s*까지/.test(text) || /\b(?:to|until)\b/.test(text);
   if (hasStart && hasTarget) return true;
   if (/시작/.test(text) && /까지/.test(text)) return true;
   return false;
 }
-
 function parseTrainerConfig(text) {
   const cfg = { start: 50, target: 150, step: 10, interval: 30 };
   let m;
-  if ((m = text.match(/(?:every|각|매|마다|간격)\s*(\d{1,3})/)))
-    cfg.interval = clampRange(+m[1], 2, 600);
-  if ((m = text.match(/(\d{1,3})\s*(?:초|secs?|seconds?)/)))
-    cfg.interval = clampRange(+m[1], 2, 600);
-  if ((m = text.match(/(?:by|steps?(?:\s+of)?|스텝|단계)\s*(\d{1,3})/)))
-    cfg.step = clampRange(+m[1], 1, 60);
+  if ((m = text.match(/(?:every|각|매|마다|간격)\s*(\d{1,3})/))) cfg.interval = clampRange(+m[1], 2, 600);
+  if ((m = text.match(/(\d{1,3})\s*(?:초|secs?|seconds?)/))) cfg.interval = clampRange(+m[1], 2, 600);
+  if ((m = text.match(/(?:by|steps?(?:\s+of)?|스텝|단계)\s*(\d{1,3})/))) cfg.step = clampRange(+m[1], 1, 60);
   if ((m = text.match(/(\d{1,3})\s*씩/))) cfg.step = clampRange(+m[1], 1, 60);
-
   let startN = null;
   let targetN = null;
   if ((m = text.match(/(\d{1,3})\s*(?:부터|에서)/))) startN = +m[1];
   else if ((m = text.match(/(?:from|starting(?:\s+at)?)\s+(\d{1,3})/))) startN = +m[1];
   if ((m = text.match(/(\d{1,3})\s*까지/))) targetN = +m[1];
   else if ((m = text.match(/(?:up to|\bto\b|\buntil\b|목표)\s*(\d{1,3})/))) targetN = +m[1];
-
   if (startN === null || targetN === null) {
     m = text.match(/(\d{1,3})\s*(?:to|~|–|-|에서|부터)\s*(\d{1,3})/);
     if (m) {
@@ -351,7 +306,6 @@ function parseTrainerConfig(text) {
   if (targetN !== null) cfg.target = clampBpm(targetN);
   return cfg;
 }
-
 function startTrainer(cfg) {
   trainer.active = true;
   trainer.target = cfg.target;
@@ -411,9 +365,7 @@ function renderRamp() {
     `🎯 ${state.bpm} ${arrow} ${trainer.target} · +${trainer.step} · next in ${trainer.remaining}s`;
 }
 
-/* =========================================================================
- * Voice Control — Speech Recognition
- * ========================================================================= */
+/* ===== Voice Control — Speech Recognition ===== */
 const RECOG_LANGS = [
   ["en-US", "English (US)"], ["en-GB", "English (UK)"], ["ko-KR", "한국어"],
   ["ja-JP", "日本語"], ["zh-CN", "中文 (简体)"], ["zh-TW", "中文 (繁體)"],
@@ -421,33 +373,28 @@ const RECOG_LANGS = [
   ["it-IT", "Italiano"], ["pt-BR", "Português (BR)"], ["ru-RU", "Русский"],
   ["hi-IN", "हिन्दी"],
 ];
-
 const KEYWORDS = {
   play: ["start", "play", "go", "begin", "resume", "run", "시작", "고", "재생",
     "플레이", "スタート", "始め", "再生", "开始", "播放", "empezar", "iniciar",
-    "comenzar", "commencer", "jouer", "spielen", "avvia", "tocar", "старт",
-    "начать"],
+    "comenzar", "commencer", "jouer", "spielen", "avvia", "tocar", "старт", "начать"],
   stop: ["stop", "pause", "halt", "end", "quit", "정지", "멈춰", "그만", "스톱",
     "꺼", "停止", "止め", "停", "暂停", "parar", "detener", "alto", "arrêter",
     "stopp", "ferma", "стоп", "стой"],
   faster: ["faster", "speed up", "quicker", "빠르게", "빨리", "더 빨리", "速く",
-    "はやく", "快", "快点", "更快", "más rápido", "rapido", "rápido",
-    "plus vite", "schneller", "più veloce", "быстрее"],
-  slower: ["slower", "slow down", "느리게", "천천히", "더 느리게", "遅く",
-    "おそく", "慢", "慢点", "更慢", "más lento", "lento", "plus lent",
-    "langsamer", "più lento", "медленнее"],
+    "はやく", "快", "快点", "更快", "más rápido", "rapido", "rápido", "plus vite",
+    "schneller", "più veloce", "быстрее"],
+  slower: ["slower", "slow down", "느리게", "천천히", "더 느리게", "遅く", "おそく",
+    "慢", "慢点", "更慢", "más lento", "lento", "plus lent", "langsamer",
+    "più lento", "медленнее"],
   tap: ["tap", "탭", "タップ", "点击", "toque", "taper"],
   subdiv: ["subdivision", "subdivide", "세분", "세분박", "잇단", "分割", "细分"],
   trainer: ["trainer", "train", "ramp", "훈련", "연습", "트레이너", "램프",
-    "トレーナー", "練習", "训练", "练习", "entrenador", "entraîneur",
-    "trainingsmodus"],
+    "トレーナー", "練習", "训练", "练习", "entrenador", "entraîneur", "trainingsmodus"],
   reset: ["reset", "리셋", "초기화", "リセット", "重置", "reiniciar",
     "réinitialiser", "zurücksetzen"],
 };
-
 const WORD_NUM = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12 };
 
-/** Numerator-only from word forms / "3박자" / "waltz". Returns 0 if none. */
 function parseBeats(text) {
   if (/waltz|왈츠|walzer|valse/.test(text)) return 3;
   const wordNums = [];
@@ -455,8 +402,7 @@ function parseBeats(text) {
   let m;
   while ((m = re.exec(text))) wordNums.push(WORD_NUM[m[1]]);
   if (wordNums.length >= 2) return wordNums[0];
-  const beatKw =
-    /beat|signature|\btime\b|박자|拍子|拍|takt|tiempo|temps|comp[áa]s/.test(text);
+  const beatKw = /beat|signature|\btime\b|박자|拍子|拍|takt|tiempo|temps|comp[áa]s/.test(text);
   if (beatKw) {
     const dm = text.match(/(1[0-2]|[1-9])/);
     if (dm) return parseInt(dm[1], 10);
@@ -465,19 +411,10 @@ function parseBeats(text) {
   return 0;
 }
 
-/**
- * Full time signature { num, den }. Understands:
- *  - Korean "N분의 M(박자)" = M/N  (e.g. "8분의 6박자" → 6/8)
- *  - "M/N", "6/8"
- *  - "waltz"
- *  - word/keyword numerator ("three four", "3박자") → /4
- */
 function parseTimeSignature(text) {
   let m;
-  if ((m = text.match(/(\d{1,2})\s*분의\s*(\d{1,2})/)))
-    return { num: +m[2], den: +m[1] };
-  if ((m = text.match(/\b([1-9]\d?)\s*\/\s*([1-9]\d?)\b/)))
-    return { num: +m[1], den: +m[2] };
+  if ((m = text.match(/(\d{1,2})\s*분의\s*(\d{1,2})/))) return { num: +m[2], den: +m[1] };
+  if ((m = text.match(/\b([1-9]\d?)\s*\/\s*([1-9]\d?)\b/))) return { num: +m[1], den: +m[2] };
   if (/waltz|왈츠|walzer|valse/.test(text)) return { num: 3, den: 4 };
   const beats = parseBeats(text);
   if (beats) return { num: beats, den: 4 };
@@ -486,7 +423,6 @@ function parseTimeSignature(text) {
 
 let recognition = null;
 let listening = false;
-
 function matchAny(text, list) {
   return list.some((kw) => text.includes(kw));
 }
@@ -509,7 +445,6 @@ function handleTranscript(raw) {
     flashCmd("Reset");
     return;
   }
-
   if (isRampPhrase(text)) {
     const hasNums = /\d{2,3}/.test(text);
     if (!hasNums && trainer.active) {
@@ -523,24 +458,18 @@ function handleTranscript(raw) {
     flashCmd(`Ramp ▶ ${cfg.start}→${cfg.target}`);
     return;
   }
-
-  // Subdivision — "subdivision 2", "세분박 3".
   if (matchAny(text, KEYWORDS.subdiv)) {
     const m = text.match(/([1-4])/);
     setSubdiv(m ? +m[1] : (state.subdiv % 4) + 1);
     flashCmd("Sub · " + state.subdiv);
     return;
   }
-
-  // Time signature — "6/8", "8분의 6박자", "three four", "waltz".
   const ts = parseTimeSignature(text);
   if (ts) {
     setTimeSignature(ts.num, ts.den);
     flashCmd("Time · " + state.numerator + "/" + state.denominator);
     return;
   }
-
-  // Spoken number → tempo.
   const num = text.match(/\d{2,3}/);
   if (num) {
     const n = parseInt(num[0], 10);
@@ -552,8 +481,6 @@ function handleTranscript(raw) {
       return;
     }
   }
-
-  // Tempo by marking name.
   const term = parseTempoTerm(text);
   if (term) {
     stopTrainer();
@@ -562,7 +489,6 @@ function handleTranscript(raw) {
     flashCmd(tempoName(term) + " · " + term);
     return;
   }
-
   if (matchAny(text, KEYWORDS.faster)) {
     stopTrainer();
     setBpm(state.bpm + 5);
@@ -640,7 +566,6 @@ function initRecognition() {
     }
   };
 }
-
 function setMicUI(on) {
   el.micBtn.classList.toggle("listening", on);
   el.micBtn.textContent = on ? "🛑 Stop Listening" : "🎤 Start Listening";
@@ -666,14 +591,11 @@ function toggleListening() {
   listening ? stopListening() : startListening();
 }
 
-/* =========================================================================
- * Rotary dial interaction
- * ========================================================================= */
+/* ===== iPod-style click wheel ===== */
 let dragging = false;
 let lastAngle = 0;
 let angleAccum = 0;
-const DEG_PER_BPM = 3; // dial sensitivity
-
+const DEG_PER_BPM = 3;
 function angleAt(e) {
   const r = el.dial.getBoundingClientRect();
   const cx = r.left + r.width / 2;
@@ -707,52 +629,37 @@ function onDialUp() {
   el.dial.classList.remove("turning");
 }
 
-/* =========================================================================
- * Events
- * ========================================================================= */
+/* ===== Events ===== */
 el.dial.addEventListener("pointerdown", onDialDown);
 el.dial.addEventListener("pointermove", onDialMove);
 el.dial.addEventListener("pointerup", onDialUp);
 el.dial.addEventListener("pointercancel", onDialUp);
-
-el.dialCenter.addEventListener("pointerdown", (e) => {
-  e.stopPropagation(); // don't start a dial drag
-});
+el.dialCenter.addEventListener("pointerdown", (e) => e.stopPropagation());
 el.dialCenter.addEventListener("click", (e) => {
   e.stopPropagation();
   toggle();
 });
 
-el.arrowUp.addEventListener("click", (e) => {
-  e.stopPropagation();
-  if (trainer.active) stopTrainer();
-  setBpm(state.bpm + 1);
+document.querySelectorAll(".nudge-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    if (trainer.active) stopTrainer();
+    setBpm(state.bpm + Number(btn.dataset.delta));
+  });
 });
-el.arrowDown.addEventListener("click", (e) => {
-  e.stopPropagation();
-  if (trainer.active) stopTrainer();
-  setBpm(state.bpm - 1);
-});
-el.arrowUp.addEventListener("pointerdown", (e) => e.stopPropagation());
-el.arrowDown.addEventListener("pointerdown", (e) => e.stopPropagation());
 
+el.beatsPerBar.addEventListener("change", (e) => {
+  setTimeSignature(Number(e.target.value), state.denominator);
+});
+el.startBtn.addEventListener("click", toggle);
 el.tapBtn.addEventListener("click", tap);
-el.tsBtn.addEventListener("click", cycleTimeSignature);
-el.tsValue.addEventListener("click", cycleTimeSignature);
-el.subValue.addEventListener("click", cycleSubdiv);
-
 el.micBtn.addEventListener("click", toggleListening);
 el.vcLang.addEventListener("change", () => {
   if (listening && recognition) recognition.stop();
 });
-
-function toggleVoicePanel() {
+el.voiceToggle.addEventListener("click", () => {
   const collapsed = el.voicePanel.classList.toggle("collapsed");
   el.voiceToggle.setAttribute("aria-expanded", String(!collapsed));
-  if (!collapsed) el.voicePanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
-}
-el.voiceToggle.addEventListener("click", toggleVoicePanel);
-el.settingsBtn.addEventListener("click", toggleVoicePanel);
+});
 
 document.addEventListener("keydown", (e) => {
   const tag = e.target.tagName;
@@ -791,7 +698,6 @@ if ("serviceWorker" in navigator) {
   });
 }
 
-/* Auto-update: reload when a new version is deployed. */
 let loadedBuild = null;
 async function checkForUpdate() {
   try {

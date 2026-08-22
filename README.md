@@ -4,10 +4,10 @@ A simple, accurate metronome that runs entirely in the browser — no build step
 
 ## Features
 
-- **Skeuomorphic device UI** — an LCD panel (tempo, time signature, subdivision) and a large rotary dial you turn to set the tempo, with ‹ › fine-tune arrows and a center start/stop
+- **iPod-style click wheel** — drag around the wheel to set the tempo, with a center start/stop button and a position indicator
 - **Accurate timing** using the Web Audio API with a look-ahead scheduler (clicks stay on the audio clock, not the jittery JS timer)
-- **Tempo control** from 30–240 BPM by turning the dial or the ‹ › arrows
-- **Time signature & subdivision** — numerator/denominator (tap the display or the pad to cycle) and 1–4 subdivisions per beat
+- **Tempo control** from 30–240 BPM via the wheel or ±1 / ±5 buttons
+- **Time signature & subdivision** — beats per bar (incl. voice signatures like 6/8) and 1–4 subdivisions per beat (voice)
 - **Tap tempo** — tap the button (or press `T`) to set the tempo by feel
 - **Time signatures** — 1 to 8 beats per bar, with an accented downbeat
 - **Visual beat indicator** synced to the audio
