@@ -124,6 +124,7 @@ const state = {
   numerator: 4,
   denominator: 4,
   subdiv: 1,
+  volume: 0.8,
   isPlaying: false,
   currentBeat: 0,
   currentSub: 0,
@@ -134,6 +135,7 @@ const LOOKAHEAD_MS = 25;
 const SCHEDULE_AHEAD = 0.1;
 
 let audioCtx = null;
+let masterGain = null;
 let schedulerTimer = null;
 const notesInQueue = [];
 
@@ -144,6 +146,8 @@ const el = {
   tempoName: document.getElementById("tempoName"),
   beats: document.getElementById("beats"),
   beatsPerBar: document.getElementById("beatsPerBar"),
+  volSlider: document.getElementById("volSlider"),
+  volPct: document.getElementById("volPct"),
   tapBtn: document.getElementById("tapBtn"),
   dial: document.getElementById("dial"),
   knob: document.getElementById("knob"),
@@ -170,7 +174,12 @@ const el = {
 
 // --- Audio ---
 function ensureAudio() {
-  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = state.volume;
+    masterGain.connect(audioCtx.destination);
+  }
   if (audioCtx.state === "suspended") audioCtx.resume();
 }
 
@@ -186,7 +195,7 @@ function scheduleClick(beat, sub, time) {
   gain.gain.exponentialRampToValueAtTime(peak, time + 0.001);
   gain.gain.exponentialRampToValueAtTime(0.0001, time + dur);
   osc.connect(gain);
-  gain.connect(audioCtx.destination);
+  gain.connect(masterGain);
   osc.start(time);
   osc.stop(time + 0.06);
   notesInQueue.push({ beat, sub, time });
@@ -287,6 +296,15 @@ function setSubdiv(n) {
   state.subdiv = Math.max(1, Math.min(4, Math.round(n)));
 }
 
+// --- Volume ---
+function setVolume(v) {
+  state.volume = Math.max(0, Math.min(1, v));
+  if (masterGain) masterGain.gain.value = state.volume;
+  const pct = Math.round(state.volume * 100);
+  if (el.volSlider) el.volSlider.value = String(pct);
+  if (el.volPct) el.volPct.textContent = (pct === 0 ? "🔇 " : "🔊 ") + pct + "%";
+}
+
 // --- Tap tempo ---
 let tapTimes = [];
 
@@ -301,7 +319,7 @@ function tapClick() {
   gain.gain.exponentialRampToValueAtTime(0.35, t + 0.001);
   gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.04);
   osc.connect(gain);
-  gain.connect(audioCtx.destination);
+  gain.connect(masterGain);
   osc.start(t);
   osc.stop(t + 0.05);
 }
@@ -632,6 +650,12 @@ const KEYWORDS = {
   hold: ["그 템포", "그템포", "이 템포", "이템포", "현재 템포", "현재템포",
     "그 속도", "이 속도", "현재 속도", "거기서", "여기서", "그대로", "유지",
     "hold", "stay", "keep it", "keep going"],
+  // Volume
+  volume: ["volume", "볼륨", "소리", "音量", "volumen", "lautstärke", "볼륨을"],
+  louder: ["louder", "크게", "키워", "키우", "raise", "increase", "높여", "높이"],
+  quieter: ["quieter", "softer", "작게", "줄여", "줄이", "lower", "낮춰", "낮추", "decrease"],
+  mute: ["mute", "음소거", "무음", "silent", "소리 꺼", "볼륨 꺼", "소리꺼"],
+  maxvol: ["max volume", "full volume", "최대", "맥스", "loudest"],
   // Go to the tuner — plus common mis-hearings ("tuner"→"tuna", "tune"→"튠").
   tuner: ["tuner", "tune", "tuning", "tuna", "toona", "tooner", "tuna",
     "튜너", "튜닝", "튜나", "투나", "튠", "튜운", "튜우너", "조율",
@@ -822,6 +846,29 @@ function handleTranscript(raw) {
     setTimeSignature(4, 4);
     setSubdiv(1);
     flashCmd("Reset");
+    return;
+  }
+
+  // Volume — "volume up/down", "볼륨 50", "louder"/"quieter", "mute". Direction
+  // words (up/올려…) only count as volume when a volume word is present, so the
+  // ramp's "올려줘" isn't hijacked.
+  if (matchAny(text, KEYWORDS.mute)) {
+    ensureAudio();
+    setVolume(0);
+    flashCmd("🔇 Muted");
+    return;
+  }
+  const wantsVolume = matchAny(text, KEYWORDS.volume);
+  if (wantsVolume || matchAny(text, KEYWORDS.louder) || matchAny(text, KEYWORDS.quieter)) {
+    ensureAudio();
+    const numM = wantsVolume ? ntext.match(/(\d{1,3})/) : null;
+    const up = matchAny(text, KEYWORDS.louder) || (wantsVolume && /(\bup\b|올려|올림|업)/.test(text));
+    const down = matchAny(text, KEYWORDS.quieter) || (wantsVolume && /(\bdown\b|내려|내림|다운)/.test(text));
+    if (matchAny(text, KEYWORDS.maxvol)) setVolume(1);
+    else if (numM) setVolume(+numM[1] / 100);
+    else if (down) setVolume(state.volume - 0.1);
+    else if (up) setVolume(state.volume + 0.1);
+    flashCmd("🔊 " + Math.round(state.volume * 100) + "%");
     return;
   }
   // Intelligent handling while a ramp is RUNNING.
@@ -1107,6 +1154,11 @@ document.querySelectorAll(".nudge-btn").forEach((btn) => {
 el.beatsPerBar.addEventListener("change", (e) => {
   setTimeSignature(Number(e.target.value), state.denominator);
 });
+
+el.volSlider.addEventListener("input", (e) => {
+  ensureAudio();
+  setVolume(Number(e.target.value) / 100);
+});
 el.tapBtn.addEventListener("click", tap);
 el.micBtn.addEventListener("click", toggleListening);
 el.vcLang.addEventListener("change", () => {
@@ -1281,6 +1333,7 @@ buildBeats();
 setBpm(120);
 setTimeSignature(4, 4);
 setSubdiv(1);
+setVolume(state.volume);
 loadVoices();
 if ("speechSynthesis" in window) window.speechSynthesis.onvoiceschanged = loadVoices;
 populateRecogLangs();
