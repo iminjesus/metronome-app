@@ -280,8 +280,50 @@ function isRampPhrase(text) {
   const hasTarget = /(\d{1,3})\s*까지/.test(text) || /\b(?:to|until)\b/.test(text);
   if (hasStart && hasTarget) return true;
   if (/시작/.test(text) && /까지/.test(text)) return true;
+  // Named bounds, e.g. "안단테부터 프레스토까지", "andante to presto".
+  if (extractStart(text) != null && extractTarget(text) != null) return true;
   return false;
 }
+// Find a tempo marking sitting just before / after a marker word, so ramp
+// bounds can be named — "안단테부터", "프레스토까지", "from andante", "to presto".
+function tempoTermBeforeAny(text, markers) {
+  for (const t of TEMPO_TERMS)
+    for (const name of t.names)
+      for (const mk of markers)
+        if (text.includes(name + mk)) return t.bpm;
+  return null;
+}
+function tempoTermAfterAny(text, prefixes) {
+  for (const t of TEMPO_TERMS)
+    for (const name of t.names)
+      for (const pre of prefixes)
+        if (text.includes(pre + name)) return t.bpm;
+  return null;
+}
+
+/** Ramp start BPM from a phrase — digits or a tempo name. null if none. */
+function extractStart(text) {
+  let m = text.match(/(\d{1,3})\s*(?:부터|에서)/);
+  if (m) return clampBpm(+m[1]);
+  m = text.match(/(?:from|starting(?:\s+at)?)\s+(\d{1,3})/);
+  if (m) return clampBpm(+m[1]);
+  return (
+    tempoTermBeforeAny(text, ["부터", "에서", " to "]) ??
+    tempoTermAfterAny(text, ["from ", "starting "])
+  );
+}
+/** Ramp target BPM from a phrase — digits or a tempo name. null if none. */
+function extractTarget(text) {
+  let m = text.match(/(\d{1,3})\s*까지/);
+  if (m) return clampBpm(+m[1]);
+  m = text.match(/(?:up to|\bto\b|\buntil\b|목표)\s*(\d{1,3})/);
+  if (m) return clampBpm(+m[1]);
+  return (
+    tempoTermBeforeAny(text, ["까지"]) ??
+    tempoTermAfterAny(text, ["to ", "until ", "up to "])
+  );
+}
+
 function parseTrainerConfig(text) {
   const cfg = { start: 50, target: 150, step: 10, interval: 30 };
   let m;
@@ -289,21 +331,17 @@ function parseTrainerConfig(text) {
   if ((m = text.match(/(\d{1,3})\s*(?:초|secs?|seconds?)/))) cfg.interval = clampRange(+m[1], 2, 600);
   if ((m = text.match(/(?:by|steps?(?:\s+of)?|스텝|단계)\s*(\d{1,3})/))) cfg.step = clampRange(+m[1], 1, 60);
   if ((m = text.match(/(\d{1,3})\s*씩/))) cfg.step = clampRange(+m[1], 1, 60);
-  let startN = null;
-  let targetN = null;
-  if ((m = text.match(/(\d{1,3})\s*(?:부터|에서)/))) startN = +m[1];
-  else if ((m = text.match(/(?:from|starting(?:\s+at)?)\s+(\d{1,3})/))) startN = +m[1];
-  if ((m = text.match(/(\d{1,3})\s*까지/))) targetN = +m[1];
-  else if ((m = text.match(/(?:up to|\bto\b|\buntil\b|목표)\s*(\d{1,3})/))) targetN = +m[1];
+  let startN = extractStart(text);
+  let targetN = extractTarget(text);
   if (startN === null || targetN === null) {
     m = text.match(/(\d{1,3})\s*(?:to|~|–|-|에서|부터)\s*(\d{1,3})/);
     if (m) {
-      if (startN === null) startN = +m[1];
-      if (targetN === null) targetN = +m[2];
+      if (startN === null) startN = clampBpm(+m[1]);
+      if (targetN === null) targetN = clampBpm(+m[2]);
     }
   }
-  if (startN !== null) cfg.start = clampBpm(startN);
-  if (targetN !== null) cfg.target = clampBpm(targetN);
+  if (startN !== null) cfg.start = startN;
+  if (targetN !== null) cfg.target = targetN;
   return cfg;
 }
 /**
@@ -450,6 +488,10 @@ const KEYWORDS = {
     "トレーナー", "練習", "训练", "练习", "entrenador", "entraîneur", "trainingsmodus"],
   reset: ["reset", "리셋", "초기화", "リセット", "重置", "reiniciar",
     "réinitialiser", "zurücksetzen"],
+  // Hold at the current tempo — end the ramp but keep the click going.
+  hold: ["그 템포", "그템포", "이 템포", "이템포", "현재 템포", "현재템포",
+    "그 속도", "이 속도", "현재 속도", "거기서", "여기서", "그대로", "유지",
+    "hold", "stay", "keep it", "keep going"],
 };
 const WORD_NUM = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12 };
 
@@ -581,30 +623,56 @@ function handleTranscript(raw) {
     flashCmd("Reset");
     return;
   }
-  // Live tweak of a RUNNING ramp: re-state just one part and it changes in
-  // place — e.g. "매 7초만", "8씩", "200까지" — as long as no new start is given.
+  // Intelligent handling while a ramp is RUNNING.
   if (trainer.active) {
-    const hasStart =
-      /(\d{1,3})\s*(?:부터|에서)/.test(ntext) ||
-      /\b(?:from|starting)\b/.test(ntext) ||
-      /(\d{1,3})\s*(?:to|~|–|-|에서|부터)\s*(\d{1,3})/.test(ntext);
-    if (!hasStart) {
-      const adj = parseRampAdjustment(ntext);
-      if (adj.changed) {
-        const labels = applyRampAdjustment(adj);
-        flashCmd("Ramp · " + labels.join(" "));
-        return;
-      }
-    }
-  }
+    const startN = extractStart(ntext);
+    const targetN = extractTarget(ntext);
+    const adj = parseRampAdjustment(ntext);
 
-  if (isRampPhrase(ntext)) {
-    const hasNums = /\d{2,3}/.test(ntext);
-    if (!hasNums && trainer.active) {
+    // "그 템포에서 멈춰" — stop climbing but keep playing at the current tempo.
+    if (matchAny(text, KEYWORDS.hold)) {
+      const bpm = state.bpm;
+      stopTrainer();
+      flashCmd("Hold · " + bpm);
+      return;
+    }
+    // Bare "trainer" / "ramp" with nothing else — end the ramp.
+    if (matchAny(text, KEYWORDS.trainer) && startN == null && targetN == null && !adj.changed) {
       stopTrainer();
       flashCmd("Ramp ■");
       return;
     }
+    // "50부터 다시" — jump to a new start, keep the same target/step/interval.
+    if (startN != null && targetN == null) {
+      if (adj.step !== undefined) trainer.step = adj.step;
+      if (adj.interval !== undefined) trainer.interval = adj.interval;
+      trainer.dir = trainer.target >= startN ? 1 : -1;
+      setBpm(startN);
+      clearTimers();
+      speakNumber(startN);
+      if (state.bpm === trainer.target) finishTrainer();
+      else scheduleNextStep();
+      flashCmd("Ramp ↻ " + startN + "→" + trainer.target);
+      return;
+    }
+    // A new full range — restart the ramp.
+    if (startN != null && targetN != null) {
+      const cfg = parseTrainerConfig(ntext);
+      stopTrainer();
+      startTrainer(cfg);
+      flashCmd(`Ramp ▶ ${cfg.start}→${cfg.target}`);
+      return;
+    }
+    // Only interval / step / target restated — adjust in place.
+    if (adj.changed) {
+      const labels = applyRampAdjustment(adj);
+      flashCmd("Ramp · " + labels.join(" "));
+      return;
+    }
+  }
+
+  // Start a new ramp (not running, or nothing above matched).
+  if (isRampPhrase(ntext)) {
     const cfg = parseTrainerConfig(ntext);
     if (trainer.active) stopTrainer();
     startTrainer(cfg);
