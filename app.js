@@ -152,8 +152,8 @@ const el = {
   // Views / nav
   metronomeView: document.getElementById("metronomeView"),
   tunerView: document.getElementById("tunerView"),
-  tunerLink: document.getElementById("tunerLink"),
-  tunerBack: document.getElementById("tunerBack"),
+  tabMetronome: document.getElementById("tabMetronome"),
+  tabTuner: document.getElementById("tabTuner"),
   // Tuner
   tunerNote: document.getElementById("tunerNote"),
   tunerFreq: document.getElementById("tunerFreq"),
@@ -1196,7 +1196,8 @@ function showView(name) {
   const toTuner = name === "tuner";
   el.metronomeView.hidden = toTuner;
   el.tunerView.hidden = !toTuner;
-  el.tunerLink.hidden = toTuner;
+  el.tabMetronome.classList.toggle("active", !toTuner);
+  el.tabTuner.classList.toggle("active", toTuner);
   if (toTuner) {
     if (state.isPlaying) stop();
     stopListening(); // free the mic; voice isn't used in the tuner
@@ -1207,8 +1208,8 @@ function showView(name) {
   }
 }
 
-el.tunerLink.addEventListener("click", () => showView("tuner"));
-el.tunerBack.addEventListener("click", () => showView("metronome"));
+el.tabMetronome.addEventListener("click", () => showView("metronome"));
+el.tabTuner.addEventListener("click", () => showView("tuner"));
 el.tunerToggle.addEventListener("click", toggleTuner);
 
 // --- Init ---
