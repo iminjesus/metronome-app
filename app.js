@@ -592,10 +592,25 @@ const KEYWORDS = {
   hold: ["그 템포", "그템포", "이 템포", "이템포", "현재 템포", "현재템포",
     "그 속도", "이 속도", "현재 속도", "거기서", "여기서", "그대로", "유지",
     "hold", "stay", "keep it", "keep going"],
-  // Go to the tuner.
-  tuner: ["tuner", "튜너", "tune", "tuning", "튜닝", "조율", "チューナー",
-    "调音", "調音", "afinador", "accordatore", "stimmgerät"],
+  // Go to the tuner — plus common mis-hearings ("tuner"→"tuna", "tune"→"튠").
+  tuner: ["tuner", "tune", "tuning", "tuna", "toona", "tooner", "tuna",
+    "튜너", "튜닝", "튜나", "투나", "튠", "튜운", "튜우너", "조율",
+    "チューナー", "调音", "調音", "afinador", "accordatore", "stimmgerät"],
 };
+
+// Fuzzy backup for the tuner command, since STT mangles it a lot.
+const TUNER_KEYS = ["tuner", "tune", "tuning", "tuna", "tyuneo", "tyuning", "tyun", "joyul"];
+function isTunerPhrase(text) {
+  if (matchAny(text, KEYWORDS.tuner)) return true;
+  for (const tok of text.split(/\s+/)) {
+    const r = romanize(tok);
+    if (r.length < 3) continue;
+    for (const k of TUNER_KEYS) {
+      if (1 - levenshtein(r, k) / Math.max(r.length, k.length) >= 0.7) return true;
+    }
+  }
+  return false;
+}
 const WORD_NUM = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12 };
 
 function parseBeats(text) {
@@ -719,7 +734,7 @@ function handleTranscript(raw) {
   el.vcHeard.textContent = "“" + raw.trim() + "”";
 
   // Go to the tuner ("튜너로 가줘", "tune 할거야"). Voice turns off there.
-  if (matchAny(text, KEYWORDS.tuner)) {
+  if (isTunerPhrase(text)) {
     flashCmd("→ Tuner");
     showView("tuner");
     return;
