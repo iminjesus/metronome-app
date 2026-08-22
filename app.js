@@ -143,8 +143,6 @@ const el = {
   tempoName: document.getElementById("tempoName"),
   beats: document.getElementById("beats"),
   beatsPerBar: document.getElementById("beatsPerBar"),
-  startBtn: document.getElementById("startBtn"),
-  tapBtn: document.getElementById("tapBtn"),
   dial: document.getElementById("dial"),
   knob: document.getElementById("knob"),
   dialCenter: document.getElementById("dialCenter"),
@@ -238,8 +236,6 @@ function start() {
   notesInQueue.length = 0;
   schedulerTimer = setInterval(scheduler, LOOKAHEAD_MS);
   requestAnimationFrame(drawLoop);
-  el.startBtn.textContent = "Stop";
-  el.startBtn.classList.add("playing");
   el.dialCenter.classList.add("playing");
 }
 function stop() {
@@ -248,8 +244,6 @@ function stop() {
   schedulerTimer = null;
   notesInQueue.length = 0;
   for (const dot of el.beats.children) dot.classList.remove("active", "accent");
-  el.startBtn.textContent = "Start";
-  el.startBtn.classList.remove("playing");
   el.dialCenter.classList.remove("playing");
   if (trainer.active) stopTrainer();
 }
@@ -1042,8 +1036,6 @@ document.querySelectorAll(".nudge-btn").forEach((btn) => {
 el.beatsPerBar.addEventListener("change", (e) => {
   setTimeSignature(Number(e.target.value), state.denominator);
 });
-el.startBtn.addEventListener("click", toggle);
-el.tapBtn.addEventListener("click", tap);
 el.micBtn.addEventListener("click", toggleListening);
 el.vcLang.addEventListener("change", () => {
   if (listening && recognition) recognition.stop();
