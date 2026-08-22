@@ -19,10 +19,7 @@
 </head>
 <body>
   <main class="app">
-    <nav class="nav">
-      <button class="nav-tab active" id="tabMetronome" data-view="metronome">Metronome</button>
-      <button class="nav-tab" id="tabTuner" data-view="tuner">Tuner</button>
-    </nav>
+    <button class="corner-btn" id="tunerLink" aria-label="Open tuner">🎸 Tuner</button>
 
     <section id="metronomeView">
     <!-- Visual beat indicator -->
@@ -74,8 +71,6 @@
       <button id="startBtn" class="btn btn-primary" aria-label="Start or stop">Start</button>
     </div>
 
-    <p class="hint">Turn the wheel for tempo · <kbd>Space</kbd> start/stop · <kbd>T</kbd> tap</p>
-
     <!-- Speed ramp status (voice-started) -->
     <div class="ramp-status" id="rampStatus" hidden></div>
 
@@ -116,6 +111,7 @@
 
     <!-- ===== Tuner ===== -->
     <section id="tunerView" hidden>
+      <button class="corner-btn left" id="tunerBack" aria-label="Back to metronome">← Metronome</button>
       <div class="tuner">
         <div class="tuner-note" id="tunerNote">–</div>
         <div class="tuner-freq" id="tunerFreq">–</div>
