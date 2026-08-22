@@ -355,3 +355,96 @@ kbd {
 .vc-unsupported { color: var(--beat-accent); }
 
 .vc-note { margin: 4px 0 8px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+
+/* ===== Top nav (Metronome / Tuner) ===== */
+.nav {
+  display: flex;
+  gap: 6px;
+  background: #101319;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  padding: 4px;
+  margin-bottom: 22px;
+}
+.nav-tab {
+  flex: 1;
+  padding: 10px 0;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--muted);
+  background: none;
+  border: none;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.nav-tab.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* ===== Tuner ===== */
+.tuner { text-align: center; padding: 6px 0 4px; }
+.tuner-note {
+  font-size: 92px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  min-height: 92px;
+}
+.tuner-note.in-tune { color: #43e08a; text-shadow: 0 0 26px rgba(67, 224, 138, 0.5); }
+.tuner-freq {
+  color: var(--muted);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  margin: 6px 0 22px;
+  min-height: 18px;
+}
+.tuner-meter {
+  position: relative;
+  height: 74px;
+  background: linear-gradient(180deg, #14171e, #0e1015);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.tuner-center {
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 50%;
+  width: 2px;
+  margin-left: -1px;
+  background: rgba(67, 224, 138, 0.55);
+}
+.tuner-needle {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 50%;
+  width: 4px;
+  margin-left: -2px;
+  border-radius: 2px;
+  background: var(--beat-accent);
+  box-shadow: 0 0 12px var(--beat-accent);
+  transition: left 0.08s ease;
+}
+.tuner-needle.in-tune { background: #43e08a; box-shadow: 0 0 14px #43e08a; }
+.tuner-scale {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  margin: 6px 4px 0;
+}
+.tuner-cents {
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  margin: 14px 0 18px;
+  min-height: 24px;
+}

@@ -95,3 +95,12 @@ stay in sync with what you hear.
 > mix — e.g. "one twenty" (120), "one fifty" (150), "forty five" (45). So
 > "one twenty to one fifty every ten seconds by five" starts a ramp just like
 > the digit form.
+
+## Tuner
+
+Switch to the **Tuner** tab (or say "tuner" / "튜너로 가줘" / "tune") for a
+chromatic instrument tuner: play a single note and it shows the nearest note,
+the frequency, and how many cents sharp/flat you are (green within ±5¢, A4 =
+440 Hz). Pitch is detected from the microphone by autocorrelation. Voice
+control is turned off while tuning so the mic is free for pitch detection — tap
+the **Metronome** tab to go back (which re-enables voice).

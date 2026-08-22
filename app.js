@@ -149,6 +149,17 @@ const el = {
   knob: document.getElementById("knob"),
   dialCenter: document.getElementById("dialCenter"),
   rampStatus: document.getElementById("rampStatus"),
+  // Views / nav
+  metronomeView: document.getElementById("metronomeView"),
+  tunerView: document.getElementById("tunerView"),
+  tabMetronome: document.getElementById("tabMetronome"),
+  tabTuner: document.getElementById("tabTuner"),
+  // Tuner
+  tunerNote: document.getElementById("tunerNote"),
+  tunerFreq: document.getElementById("tunerFreq"),
+  tunerCents: document.getElementById("tunerCents"),
+  tunerNeedle: document.getElementById("tunerNeedle"),
+  tunerToggle: document.getElementById("tunerToggle"),
   voicePanel: document.getElementById("voicePanel"),
   voiceToggle: document.getElementById("voiceToggle"),
   micBtn: document.getElementById("micBtn"),
@@ -581,6 +592,9 @@ const KEYWORDS = {
   hold: ["그 템포", "그템포", "이 템포", "이템포", "현재 템포", "현재템포",
     "그 속도", "이 속도", "현재 속도", "거기서", "여기서", "그대로", "유지",
     "hold", "stay", "keep it", "keep going"],
+  // Go to the tuner.
+  tuner: ["tuner", "튜너", "tune", "tuning", "튜닝", "조율", "チューナー",
+    "调音", "調音", "afinador", "accordatore", "stimmgerät"],
 };
 const WORD_NUM = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12 };
 
@@ -703,6 +717,13 @@ function handleTranscript(raw) {
   // pairs like "three four" stay 3/4 instead of becoming a single number.
   const ntext = normalizeNumbers(text);
   el.vcHeard.textContent = "“" + raw.trim() + "”";
+
+  // Go to the tuner ("튜너로 가줘", "tune 할거야"). Voice turns off there.
+  if (matchAny(text, KEYWORDS.tuner)) {
+    flashCmd("→ Tuner");
+    showView("tuner");
+    return;
+  }
 
   if (matchAny(text, KEYWORDS.reset)) {
     stopTrainer();
@@ -991,6 +1012,153 @@ document.addEventListener("keydown", (e) => {
     tap();
   }
 });
+
+/* =========================================================================
+ * Tuner — chromatic pitch detection from the microphone (autocorrelation).
+ * Voice control is turned off while tuning so the mic is free for pitch.
+ * ========================================================================= */
+const NOTE_NAMES = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
+let tunerStream = null;
+let tunerAnalyser = null;
+let tunerBuf = null;
+let tunerRAF = null;
+let tunerActive = false;
+
+function autoCorrelate(buf, sampleRate) {
+  const SIZE = buf.length;
+  let rms = 0;
+  for (let i = 0; i < SIZE; i++) rms += buf[i] * buf[i];
+  rms = Math.sqrt(rms / SIZE);
+  if (rms < 0.01) return -1; // too quiet
+
+  let r1 = 0;
+  let r2 = SIZE - 1;
+  const thres = 0.2;
+  for (let i = 0; i < SIZE / 2; i++)
+    if (Math.abs(buf[i]) < thres) { r1 = i; break; }
+  for (let i = 1; i < SIZE / 2; i++)
+    if (Math.abs(buf[SIZE - i]) < thres) { r2 = SIZE - i; break; }
+
+  const b = buf.slice(r1, r2);
+  const n = b.length;
+  const c = new Float32Array(n);
+  for (let i = 0; i < n; i++)
+    for (let j = 0; j < n - i; j++) c[i] += b[j] * b[j + i];
+
+  let d = 0;
+  while (d < n - 1 && c[d] > c[d + 1]) d++;
+  let maxval = -1;
+  let maxpos = -1;
+  for (let i = d; i < n; i++) {
+    if (c[i] > maxval) { maxval = c[i]; maxpos = i; }
+  }
+  let T0 = maxpos;
+  if (T0 <= 0) return -1;
+
+  const x1 = c[T0 - 1] || 0;
+  const x2 = c[T0];
+  const x3 = c[T0 + 1] || 0;
+  const a = (x1 + x3 - 2 * x2) / 2;
+  const bb = (x3 - x1) / 2;
+  if (a) T0 = T0 - bb / (2 * a);
+
+  const freq = sampleRate / T0;
+  return freq > 25 && freq < 4500 ? freq : -1;
+}
+
+function updateTunerDisplay(freq) {
+  const noteNum = 12 * Math.log2(freq / 440) + 69;
+  const rounded = Math.round(noteNum);
+  const cents = Math.round((noteNum - rounded) * 100);
+  const name = NOTE_NAMES[((rounded % 12) + 12) % 12];
+  const octave = Math.floor(rounded / 12) - 1;
+  const inTune = Math.abs(cents) <= 5;
+
+  el.tunerNote.textContent = name + octave;
+  el.tunerFreq.textContent = freq.toFixed(1) + " Hz";
+  el.tunerCents.textContent = (cents > 0 ? "+" : "") + cents + " ¢";
+  el.tunerNeedle.style.left = 50 + Math.max(-50, Math.min(50, cents)) + "%";
+  el.tunerNote.classList.toggle("in-tune", inTune);
+  el.tunerNeedle.classList.toggle("in-tune", inTune);
+}
+
+function tunerLoop() {
+  if (!tunerActive || !tunerAnalyser) return;
+  tunerAnalyser.getFloatTimeDomainData(tunerBuf);
+  const freq = autoCorrelate(tunerBuf, audioCtx.sampleRate);
+  if (freq > 0) {
+    updateTunerDisplay(freq);
+  } else {
+    el.tunerFreq.textContent = "Listening…";
+    el.tunerNote.classList.remove("in-tune");
+  }
+  tunerRAF = requestAnimationFrame(tunerLoop);
+}
+
+async function startTuner() {
+  try {
+    ensureAudio();
+    tunerStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+    });
+    const src = audioCtx.createMediaStreamSource(tunerStream);
+    tunerAnalyser = audioCtx.createAnalyser();
+    tunerAnalyser.fftSize = 2048;
+    src.connect(tunerAnalyser);
+    tunerBuf = new Float32Array(tunerAnalyser.fftSize);
+    tunerActive = true;
+    el.tunerToggle.textContent = "Stop Tuner";
+    el.tunerToggle.classList.add("playing");
+    el.tunerFreq.textContent = "Listening…";
+    tunerLoop();
+  } catch (_) {
+    tunerActive = false;
+    el.tunerToggle.textContent = "Start Tuner";
+    el.tunerNote.textContent = "–";
+    el.tunerFreq.innerHTML =
+      '<span class="vc-unsupported">Microphone access needed — tap Start.</span>';
+  }
+}
+
+function stopTuner() {
+  tunerActive = false;
+  if (tunerRAF) cancelAnimationFrame(tunerRAF);
+  tunerRAF = null;
+  if (tunerStream) {
+    tunerStream.getTracks().forEach((t) => t.stop());
+    tunerStream = null;
+  }
+  tunerAnalyser = null;
+  el.tunerToggle.textContent = "Start Tuner";
+  el.tunerToggle.classList.remove("playing");
+}
+
+function toggleTuner() {
+  tunerActive ? stopTuner() : startTuner();
+}
+
+/* =========================================================================
+ * View switching (Metronome ↔ Tuner)
+ * ========================================================================= */
+function showView(name) {
+  const toTuner = name === "tuner";
+  el.metronomeView.hidden = toTuner;
+  el.tunerView.hidden = !toTuner;
+  el.tabMetronome.classList.toggle("active", !toTuner);
+  el.tabTuner.classList.toggle("active", toTuner);
+  if (toTuner) {
+    if (state.isPlaying) stop();
+    stopListening(); // free the mic; voice isn't used in the tuner
+    startTuner();
+  } else {
+    stopTuner();
+    startListening(); // resume hands-free control on the metronome
+  }
+}
+
+el.tabMetronome.addEventListener("click", () => showView("metronome"));
+el.tabTuner.addEventListener("click", () => showView("tuner"));
+el.tunerToggle.addEventListener("click", toggleTuner);
 
 // --- Init ---
 buildBeats();
