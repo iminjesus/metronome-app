@@ -36,7 +36,7 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.05);
   border-radius: 22px;
   box-shadow: var(--shadow);
-  padding: 32px 28px 28px;
+  padding: 14px 22px 18px;
   width: 100%;
   max-width: 420px;
   text-align: center;
@@ -54,15 +54,15 @@ body {
 /* Beat indicator dots */
 .beats {
   display: flex;
-  gap: 10px;
+  gap: 9px;
   justify-content: center;
-  min-height: 22px;
-  margin-bottom: 22px;
+  min-height: 14px;
+  margin-bottom: 10px;
   flex-wrap: wrap;
 }
 .beat-dot {
-  width: 16px;
-  height: 16px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   background: var(--beat);
   transition: transform 0.08s ease, background 0.08s ease, box-shadow 0.08s ease;
@@ -86,30 +86,30 @@ body {
   line-height: 1;
 }
 .bpm-value {
-  font-size: 76px;
+  font-size: 54px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
 }
-.bpm-label { font-size: 16px; color: var(--muted); font-weight: 600; }
+.bpm-label { font-size: 14px; color: var(--muted); font-weight: 600; }
 .tempo-name {
   color: var(--muted);
-  font-size: 14px;
+  font-size: 13px;
   font-style: italic;
-  margin: 6px 0 8px;
-  min-height: 18px;
+  margin: 3px 0 4px;
+  min-height: 16px;
 }
 
 /* ===== iPod-style click wheel ===== */
 .wheel-wrap {
   display: flex;
   justify-content: center;
-  padding: 14px 0 20px;
+  padding: 6px 0 12px;
 }
 .wheel {
   position: relative;
-  width: 220px;
-  height: 220px;
+  width: 158px;
+  height: 158px;
   border-radius: 50%;
   touch-action: none;
   cursor: grab;
@@ -162,8 +162,8 @@ body {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 96px;
-  height: 96px;
+  width: 74px;
+  height: 74px;
   border-radius: 50%;
   border: 1px solid rgba(255, 255, 255, 0.06);
   background: radial-gradient(circle at 50% 38%, #202531 0%, #171a21 70%);
@@ -178,14 +178,14 @@ body {
   content: "";
   width: 0;
   height: 0;
-  margin-left: 5px;
-  border-left: 24px solid var(--accent);
-  border-top: 15px solid transparent;
-  border-bottom: 15px solid transparent;
+  margin-left: 4px;
+  border-left: 19px solid var(--accent);
+  border-top: 12px solid transparent;
+  border-bottom: 12px solid transparent;
 }
 .wheel-center.playing::after {
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   margin: 0;
   border: none;
   border-radius: 5px;
@@ -197,11 +197,11 @@ body {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  margin-bottom: 16px;
+  margin-bottom: 10px;
 }
 .nudge-btn {
   flex: 1;
-  padding: 10px 0;
+  padding: 9px 0;
   font-size: 15px;
   font-weight: 600;
   color: var(--text);
@@ -225,10 +225,10 @@ body {
   cursor: pointer;
 }
 
-.controls { margin-top: 22px; margin-bottom: 12px; }
+.controls { margin-top: 12px; margin-bottom: 8px; }
 .btn {
-  padding: 16px 0;
-  font-size: 17px;
+  padding: 12px 0;
+  font-size: 16px;
   font-weight: 700;
   border: none;
   border-radius: 12px;
@@ -242,7 +242,7 @@ body {
 .btn-secondary { flex: 1; background: var(--beat); color: var(--text); }
 .btn-secondary:hover { background: #333a48; }
 
-.hint { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
+.hint { color: var(--muted); font-size: 11px; margin: 6px 0 0; line-height: 1.35; }
 kbd {
   background: var(--beat);
   border-radius: 4px;
@@ -273,7 +273,7 @@ kbd {
 
 /* ===== Voice Control panel ===== */
 .panel {
-  margin-top: 22px;
+  margin-top: 10px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   text-align: left;
 }
@@ -287,8 +287,27 @@ kbd {
   color: var(--text);
   font-size: 15px;
   font-weight: 600;
-  padding: 18px 2px 14px;
+  padding: 12px 2px 10px;
   cursor: pointer;
+}
+
+/* compact voice controls row: language + mic toggle side by side */
+.vc-row { display: flex; gap: 10px; align-items: stretch; margin-bottom: 10px; }
+.vc-lang {
+  flex: 1;
+  min-width: 0;
+  background: var(--beat);
+  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+.vc-lang:focus { outline: none; border-color: var(--accent); }
+.vc-mic {
+  flex: 0 0 auto;
+  padding: 10px 18px;
+  font-size: 15px;
 }
 .panel-head .chevron { color: var(--muted); transition: transform 0.2s ease; }
 .panel.collapsed .chevron { transform: rotate(-90deg); }
@@ -333,13 +352,13 @@ kbd {
   text-align: center;
   color: var(--muted);
   font-size: 13px;
-  margin-top: 12px;
-  min-height: 18px;
+  margin-top: 4px;
+  min-height: 17px;
 }
 .vc-cmd {
   text-align: center;
-  min-height: 22px;
-  margin-top: 8px;
+  min-height: 20px;
+  margin-top: 4px;
   font-size: 15px;
   font-weight: 700;
   color: var(--accent-strong);
@@ -366,11 +385,11 @@ kbd {
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 12px;
   padding: 4px;
-  margin-bottom: 22px;
+  margin-bottom: 12px;
 }
 .nav-tab {
   flex: 1;
-  padding: 10px 0;
+  padding: 8px 0;
   font-size: 14px;
   font-weight: 700;
   letter-spacing: 0.03em;

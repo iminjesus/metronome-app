@@ -960,7 +960,7 @@ function initRecognition() {
 }
 function setMicUI(on) {
   el.micBtn.classList.toggle("listening", on);
-  el.micBtn.textContent = on ? "🛑 Stop Listening" : "🎤 Start Listening";
+  el.micBtn.textContent = on ? "🛑 Stop" : "🎤 Start";
   if (on) el.vcHeard.textContent = "Listening… say a command";
   else if (!el.vcHeard.querySelector(".vc-unsupported")) el.vcHeard.textContent = "Mic off";
 }

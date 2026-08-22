@@ -80,21 +80,16 @@
     <div class="ramp-status" id="rampStatus" hidden></div>
 
     <!-- Voice Control -->
-    <section class="panel collapsed" id="voicePanel">
-      <button class="panel-head" id="voiceToggle" aria-expanded="false">
+    <section class="panel" id="voicePanel">
+      <button class="panel-head" id="voiceToggle" aria-expanded="true">
         <span>🎤 Voice Control</span>
         <span class="chevron">▾</span>
       </button>
       <div class="panel-body">
-        <p class="panel-desc">
-          Always listening — control everything by voice while you play, without
-          touching the app. Manual controls still work too.
-        </p>
-        <label class="field field-wide">
-          <span>Recognition language</span>
-          <select id="vcLang" aria-label="Recognition language"></select>
-        </label>
-        <button id="micBtn" class="btn btn-primary btn-block">🎤 Start Listening</button>
+        <div class="vc-row">
+          <select id="vcLang" class="vc-lang" aria-label="Recognition language"></select>
+          <button id="micBtn" class="btn btn-primary vc-mic">🎤 Start</button>
+        </div>
         <div class="mic-heard" id="vcHeard">Starting mic…</div>
         <div class="vc-cmd" id="vcCmd" aria-live="polite"></div>
         <details class="vc-help">
