@@ -39,6 +39,79 @@ function parseTempoTerm(text) {
   return 0;
 }
 
+/* Fuzzy matching for the fixed tempo-term vocabulary, so mis-transcriptions
+ * still resolve — "moderato" heard as "모델아트", "프레스또", "moderat", etc.
+ * Words are romanized (hangul → latin phonetics) and compared by edit distance. */
+const HANGUL_CHO = ["g","kk","n","d","tt","r","m","b","pp","s","ss","","j","jj","ch","k","t","p","h"];
+const HANGUL_JUNG = ["a","ae","ya","yae","eo","e","yeo","ye","o","wa","wae","oe","yo","u","wo","we","wi","yu","eu","ui","i"];
+const HANGUL_JONG = ["","g","kk","gs","n","nj","nh","d","l","lg","lm","lb","ls","lt","lp","lh","m","b","bs","s","ss","ng","j","ch","k","t","p","h"];
+
+function romanize(s) {
+  let out = "";
+  for (const ch of s.toLowerCase()) {
+    const code = ch.charCodeAt(0);
+    if (code >= 0xac00 && code <= 0xd7a3) {
+      const x = code - 0xac00;
+      out += HANGUL_CHO[Math.floor(x / 588)] +
+        HANGUL_JUNG[Math.floor((x % 588) / 28)] +
+        HANGUL_JONG[x % 28];
+    } else if (/[a-z0-9]/.test(ch)) {
+      out += ch;
+    }
+  }
+  return out;
+}
+
+function levenshtein(a, b) {
+  const m = a.length;
+  const n = b.length;
+  if (!m) return n;
+  if (!n) return m;
+  const d = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    let prev = d[0];
+    d[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const tmp = d[j];
+      d[j] = Math.min(d[j] + 1, d[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = tmp;
+    }
+  }
+  return d[n];
+}
+
+const TEMPO_KEYS = TEMPO_TERMS.map((t) => ({
+  bpm: t.bpm,
+  keys: [...new Set(t.names.map(romanize).filter((k) => k.length >= 3))],
+}));
+
+/** Best tempo BPM for a single spoken word, or null if nothing is close. */
+function matchTempoToken(token) {
+  const r = romanize(token);
+  if (r.length < 3) return null;
+  let bestBpm = null;
+  let bestSim = 0;
+  for (const t of TEMPO_KEYS) {
+    for (const k of t.keys) {
+      const sim = 1 - levenshtein(r, k) / Math.max(r.length, k.length);
+      if (sim > bestSim) {
+        bestSim = sim;
+        bestBpm = t.bpm;
+      }
+    }
+  }
+  return bestSim >= 0.62 ? bestBpm : null;
+}
+
+/** Scan a phrase for a (possibly mis-heard) tempo marking. 0 if none. */
+function fuzzyTempoTerm(text) {
+  for (const tok of text.split(/\s+/)) {
+    const b = matchTempoToken(tok);
+    if (b) return b;
+  }
+  return 0;
+}
+
 const BPM_MIN = 30;
 const BPM_MAX = 240;
 const clampBpm = (n) => Math.max(BPM_MIN, Math.min(BPM_MAX, Math.round(n)));
@@ -301,6 +374,20 @@ function tempoTermAfterAny(text, prefixes) {
   return null;
 }
 
+// Fuzzy-match a tempo name that sits just before a Korean particle
+// (모델아트부터 → moderato). `parts` are the particle spellings.
+function fuzzyTempoBeforeParticle(text, parts) {
+  const suffix = new RegExp("^(.+?)(?:" + parts.join("|") + ")$");
+  for (const tok of text.split(/\s+/)) {
+    const m = tok.match(suffix);
+    if (m) {
+      const b = matchTempoToken(m[1]);
+      if (b) return b;
+    }
+  }
+  return null;
+}
+
 /** Ramp start BPM from a phrase — digits or a tempo name. null if none. */
 function extractStart(text) {
   let m = text.match(/(\d{1,3})\s*(?:부터|에서)/);
@@ -309,7 +396,8 @@ function extractStart(text) {
   if (m) return clampBpm(+m[1]);
   return (
     tempoTermBeforeAny(text, ["부터", "에서", " to "]) ??
-    tempoTermAfterAny(text, ["from ", "starting "])
+    tempoTermAfterAny(text, ["from ", "starting "]) ??
+    fuzzyTempoBeforeParticle(text, ["부터", "에서", "로부터"])
   );
 }
 /** Ramp target BPM from a phrase — digits or a tempo name. null if none. */
@@ -320,7 +408,8 @@ function extractTarget(text) {
   if (m) return clampBpm(+m[1]);
   return (
     tempoTermBeforeAny(text, ["까지"]) ??
-    tempoTermAfterAny(text, ["to ", "until ", "up to "])
+    tempoTermAfterAny(text, ["to ", "until ", "up to "]) ??
+    fuzzyTempoBeforeParticle(text, ["까지"])
   );
 }
 
@@ -735,6 +824,15 @@ function handleTranscript(raw) {
   if (matchAny(text, KEYWORDS.play)) {
     if (!state.isPlaying) start();
     flashCmd("Play");
+    return;
+  }
+  // Last resort: a mis-transcribed tempo marking ("moderato" → "모델아트").
+  const fz = fuzzyTempoTerm(text);
+  if (fz) {
+    stopTrainer();
+    setBpm(fz);
+    if (!state.isPlaying) start();
+    flashCmd(tempoName(fz) + " · " + fz);
     return;
   }
   flashCmd("—");
