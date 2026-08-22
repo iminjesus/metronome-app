@@ -520,13 +520,37 @@ function wordsToNum(tokens) {
   return total + current;
 }
 
-/** Replace runs of English number words in `text` with their digits. */
+// Korean speech recognition transcribes spoken English phonetically into
+// hangul ("five" → "파이브", "one fifty" → "원피프티"). Map those loanword
+// spellings back to English words so the converter above can read them. Values
+// are English so the colloquial-hundreds logic still applies ("one fifty" →
+// 150). Keys are foreign loanwords that don't collide with Korean command words.
+const HANGUL_EN = {
+  원: "one", 투: "two", 쓰리: "three", 트리: "three", 포: "four", 훠: "four",
+  파이브: "five", 식스티: "sixty", 식스: "six", 세븐티: "seventy",
+  세븐: "seven", 에이티: "eighty", 에잇: "eight", 에이트: "eight",
+  나인티: "ninety", 나인: "nine", 텐: "ten", 일레븐: "eleven",
+  트웰브: "twelve", 투엔티: "twenty", 트웨니: "twenty", 트웬티: "twenty",
+  써티: "thirty", 서티: "thirty", 포티: "forty", 훠티: "forty",
+  피프티: "fifty", 헌드레드: "hundred", 헌드렛: "hundred",
+  에브리: "every", 세컨드: "second", 세컨트: "second", 세컨: "second",
+};
+const HANGUL_EN_RE = new RegExp(
+  Object.keys(HANGUL_EN).sort((a, b) => b.length - a.length).join("|"),
+  "g"
+);
+
+/** Normalize spoken numbers (English words + Korean loanword spellings) to digits. */
 function normalizeNumbers(text) {
-  return text.replace(NUM_WORDS_RE, (m) => {
+  // Loanword hangul → English words (space-padded so concatenations split).
+  let t = text.replace(HANGUL_EN_RE, (m) => " " + HANGUL_EN[m] + " ");
+  // English number words → digits.
+  t = t.replace(NUM_WORDS_RE, (m) => {
     const toks = m.toLowerCase().split(/[\s-]+/).filter(Boolean);
     const n = wordsToNum(toks);
     return Number.isFinite(n) ? String(n) : m;
   });
+  return t;
 }
 
 let recognition = null;
