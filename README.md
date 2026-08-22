@@ -44,8 +44,8 @@ loosely, in the selected language:
 > page over `http://localhost` (see below) rather than opening the file
 > directly — some browsers block the mic on `file://` pages.
 >
-> Spoken numbers are recognized as digits; number *words* in some languages may
-> not parse — say or set them manually if so.
+> Numbers may be spoken as digits or as English words (including mixed with
+> another language) — see the note at the end of this file.
 
 ## Run it
 
@@ -90,3 +90,8 @@ fall within the next 100 ms directly on the Web Audio clock via
 the right moment. The on-screen beat dots are flipped in a
 `requestAnimationFrame` loop that watches the same audio clock, so the visuals
 stay in sync with what you hear.
+
+> **Numbers by word:** spoken number words work anywhere a number does, in any
+> mix — e.g. "one twenty" (120), "one fifty" (150), "forty five" (45). So
+> "one twenty to one fifty every ten seconds by five" starts a ramp just like
+> the digit form.

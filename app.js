@@ -479,6 +479,56 @@ function parseTimeSignature(text) {
   return null;
 }
 
+// English number words → digits, so spoken numbers work in any mix of
+// language/notation: "one twenty" → 120, "one fifty" → 150, "forty five" → 45,
+// "two hundred" → 200, "five" → 5.
+const NUM_WORD_VALUE = {
+  zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7,
+  eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13,
+  fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18,
+  nineteen: 19, twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60,
+  seventy: 70, eighty: 80, ninety: 90, hundred: 100, thousand: 1000,
+};
+const NUM_WORDS_RE = new RegExp(
+  "\\b(?:" +
+    Object.keys(NUM_WORD_VALUE).sort((a, b) => b.length - a.length).join("|") +
+    ")(?:[\\s-]+(?:" +
+    Object.keys(NUM_WORD_VALUE).sort((a, b) => b.length - a.length).join("|") +
+    "))*\\b",
+  "gi"
+);
+
+function wordsToNum(tokens) {
+  // Colloquial hundreds: "one twenty" = 120, "two thirty five" = 235.
+  if (tokens.length >= 2) {
+    const v0 = NUM_WORD_VALUE[tokens[0]];
+    const v1 = NUM_WORD_VALUE[tokens[1]];
+    if (v0 >= 1 && v0 <= 9 && v1 >= 10 && tokens[1] !== "hundred" && tokens[1] !== "thousand") {
+      let rest = 0;
+      for (let i = 1; i < tokens.length; i++) rest += NUM_WORD_VALUE[tokens[i]] || 0;
+      return v0 * 100 + rest;
+    }
+  }
+  // Standard: "one hundred twenty" = 120, "forty five" = 45.
+  let total = 0;
+  let current = 0;
+  for (const t of tokens) {
+    if (t === "hundred") current = (current || 1) * 100;
+    else if (t === "thousand") { total += (current || 1) * 1000; current = 0; }
+    else current += NUM_WORD_VALUE[t];
+  }
+  return total + current;
+}
+
+/** Replace runs of English number words in `text` with their digits. */
+function normalizeNumbers(text) {
+  return text.replace(NUM_WORDS_RE, (m) => {
+    const toks = m.toLowerCase().split(/[\s-]+/).filter(Boolean);
+    const n = wordsToNum(toks);
+    return Number.isFinite(n) ? String(n) : m;
+  });
+}
+
 let recognition = null;
 let listening = false;
 function matchAny(text, list) {
@@ -493,6 +543,10 @@ function flashCmd(label) {
 
 function handleTranscript(raw) {
   const text = raw.toLowerCase().trim();
+  // Number-normalized copy: "one twenty" → "120", "five" → "5". Used for every
+  // number-sensitive command; time signatures use the original text so word
+  // pairs like "three four" stay 3/4 instead of becoming a single number.
+  const ntext = normalizeNumbers(text);
   el.vcHeard.textContent = "“" + raw.trim() + "”";
 
   if (matchAny(text, KEYWORDS.reset)) {
@@ -507,11 +561,11 @@ function handleTranscript(raw) {
   // place — e.g. "매 7초만", "8씩", "200까지" — as long as no new start is given.
   if (trainer.active) {
     const hasStart =
-      /(\d{1,3})\s*(?:부터|에서)/.test(text) ||
-      /\b(?:from|starting)\b/.test(text) ||
-      /(\d{1,3})\s*(?:to|~|–|-|에서|부터)\s*(\d{1,3})/.test(text);
+      /(\d{1,3})\s*(?:부터|에서)/.test(ntext) ||
+      /\b(?:from|starting)\b/.test(ntext) ||
+      /(\d{1,3})\s*(?:to|~|–|-|에서|부터)\s*(\d{1,3})/.test(ntext);
     if (!hasStart) {
-      const adj = parseRampAdjustment(text);
+      const adj = parseRampAdjustment(ntext);
       if (adj.changed) {
         const labels = applyRampAdjustment(adj);
         flashCmd("Ramp · " + labels.join(" "));
@@ -520,21 +574,21 @@ function handleTranscript(raw) {
     }
   }
 
-  if (isRampPhrase(text)) {
-    const hasNums = /\d{2,3}/.test(text);
+  if (isRampPhrase(ntext)) {
+    const hasNums = /\d{2,3}/.test(ntext);
     if (!hasNums && trainer.active) {
       stopTrainer();
       flashCmd("Ramp ■");
       return;
     }
-    const cfg = parseTrainerConfig(text);
+    const cfg = parseTrainerConfig(ntext);
     if (trainer.active) stopTrainer();
     startTrainer(cfg);
     flashCmd(`Ramp ▶ ${cfg.start}→${cfg.target}`);
     return;
   }
   if (matchAny(text, KEYWORDS.subdiv)) {
-    const m = text.match(/([1-4])/);
+    const m = ntext.match(/([1-4])/);
     setSubdiv(m ? +m[1] : (state.subdiv % 4) + 1);
     flashCmd("Sub · " + state.subdiv);
     return;
@@ -545,7 +599,7 @@ function handleTranscript(raw) {
     flashCmd("Time · " + state.numerator + "/" + state.denominator);
     return;
   }
-  const num = text.match(/\d{2,3}/);
+  const num = ntext.match(/\d{2,3}/);
   if (num) {
     const n = parseInt(num[0], 10);
     if (n >= BPM_MIN && n <= BPM_MAX) {

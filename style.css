@@ -353,3 +353,5 @@ kbd {
 .vc-help ul { margin: 8px 0; padding-left: 18px; line-height: 1.7; }
 .vc-help b { color: var(--text); }
 .vc-unsupported { color: var(--beat-accent); }
+
+.vc-note { margin: 4px 0 8px; color: var(--muted); font-size: 12px; line-height: 1.5; }
