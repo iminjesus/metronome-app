@@ -764,3 +764,40 @@ if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js").catch(() => {});
   });
 }
+
+/* =========================================================================
+ * Auto-update: reload as soon as a new version is deployed.
+ *
+ * version.json carries a build stamp that changes on every deploy. We record
+ * it on load, then re-check when the app regains focus and on a short timer;
+ * if the deployed build differs from the running one, the page reloads and the
+ * network-first service worker serves the fresh files.
+ * ========================================================================= */
+let loadedBuild = null;
+
+async function checkForUpdate() {
+  try {
+    const res = await fetch("version.json?_=" + Date.now(), {
+      cache: "no-store",
+    });
+    if (!res.ok) return;
+    const { build } = await res.json();
+    if (!build) return;
+    if (loadedBuild === null) {
+      loadedBuild = build; // first read — remember the running version
+      return;
+    }
+    if (build !== loadedBuild) {
+      loadedBuild = build;
+      window.location.reload();
+    }
+  } catch (_) {
+    /* offline or blocked — try again next time */
+  }
+}
+
+checkForUpdate();
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") checkForUpdate();
+});
+setInterval(checkForUpdate, 30000);
