@@ -499,3 +499,6 @@ kbd {
   100% { transform: scale(1); }
 }
 .bpm.tap-flash { animation: tappulse 0.16s ease; }
+
+/* Tap tempo button pressed feedback */
+.tap-btn.tapping { background: var(--accent); color: #fff; }

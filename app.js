@@ -307,22 +307,41 @@ function tapClick() {
 }
 
 function pulseBpm() {
+  if (!el.bpm) return;
   el.bpm.classList.remove("tap-flash");
   void el.bpm.offsetWidth; // restart the animation
   el.bpm.classList.add("tap-flash");
 }
 
+let tapUiTimer = null;
 function tap() {
   const now = performance.now();
-  tapClick();
-  pulseBpm();
   if (tapTimes.length && now - tapTimes[tapTimes.length - 1] > 2000) tapTimes = [];
   tapTimes.push(now);
   if (tapTimes.length > 5) tapTimes.shift();
+
+  // Compute the tempo first — this is the essential reaction.
+  let label = "Tap again…";
   if (tapTimes.length >= 2) {
     let total = 0;
     for (let i = 1; i < tapTimes.length; i++) total += tapTimes[i] - tapTimes[i - 1];
     setBpm(60000 / (total / (tapTimes.length - 1)));
+    label = "≈ " + state.bpm + " BPM";
+  }
+
+  // Feedback — never let it block the tempo update above.
+  try {
+    tapClick();
+  } catch (_) {}
+  pulseBpm();
+  if (el.tapBtn) {
+    el.tapBtn.classList.add("tapping");
+    el.tapBtn.textContent = label;
+    clearTimeout(tapUiTimer);
+    tapUiTimer = setTimeout(() => {
+      el.tapBtn.classList.remove("tapping");
+      el.tapBtn.textContent = "Tap tempo";
+    }, 1400);
   }
 }
 
