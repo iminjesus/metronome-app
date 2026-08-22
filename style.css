@@ -23,7 +23,9 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
     Arial, sans-serif;
   display: flex;
-  align-items: center;
+  /* Top-align so a tall card (e.g. Voice Control expanded) scrolls from the
+     top instead of being clipped above the viewport. */
+  align-items: flex-start;
   justify-content: center;
   min-height: 100dvh;
   padding: 24px;
