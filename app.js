@@ -771,6 +771,9 @@ function normalizeNumbers(text) {
     const n = wordsToNum(toks);
     return Number.isFinite(n) ? String(n) : m;
   });
+  // Colloquial hundreds that STT split apart: "one thirty" often comes back as
+  // "1 30" or "1:30" → 130, "2 40" → 240.
+  t = t.replace(/\b([1-9])[\s:]+(\d{2})\b/g, (m, a, b) => String(+a * 100 + +b));
   // Sino-Korean numbers — only a whole token containing a place digit
   // (십/백) and bounded by a space/particle, so words like "천천히" or the
   // "이 템포" hold command are never corrupted.
