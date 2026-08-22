@@ -973,10 +973,32 @@ function initRecognition() {
   }
   recognition = new SR();
   recognition.continuous = true;
-  recognition.interimResults = false;
+  // Interim results let us react to short transport commands instantly instead
+  // of waiting for the engine to finalize the phrase (removes the lag).
+  recognition.interimResults = true;
   recognition.onresult = (e) => {
     const result = e.results[e.results.length - 1];
-    if (result.isFinal) handleTranscript(result[0].transcript);
+    const raw = result[0].transcript;
+    if (result.isFinal) {
+      handleTranscript(raw);
+      return;
+    }
+    // Fast path on interim for the two idempotent transport commands, so
+    // "stop"/"play" respond immediately. Guards make repeats harmless.
+    const t = raw.toLowerCase();
+    if (matchAny(t, KEYWORDS.stop)) {
+      if (state.isPlaying) {
+        stop();
+        el.vcHeard.textContent = "“" + raw.trim() + "”";
+        flashCmd("Stop");
+      }
+    } else if (matchAny(t, KEYWORDS.play)) {
+      if (!state.isPlaying) {
+        start();
+        el.vcHeard.textContent = "“" + raw.trim() + "”";
+        flashCmd("Play");
+      }
+    }
   };
   recognition.onerror = (e) => {
     if (e.error === "not-allowed" || e.error === "service-not-allowed") {
