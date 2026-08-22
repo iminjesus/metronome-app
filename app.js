@@ -789,6 +789,13 @@ async function checkForUpdate() {
     }
     if (build !== loadedBuild) {
       loadedBuild = build;
+      // Nudge the service worker to pick up its new version too, then reload.
+      try {
+        const reg = await navigator.serviceWorker.getRegistration();
+        if (reg) await reg.update();
+      } catch (_) {
+        /* ignore */
+      }
       window.location.reload();
     }
   } catch (_) {
