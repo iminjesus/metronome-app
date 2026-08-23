@@ -2,3 +2,9 @@ node_modules/
 preview.png
 *.log
 .DS_Store
+
+# Capacitor — generated locally, not needed on GitHub Pages
+www/
+android/
+ios/
+.gradle/

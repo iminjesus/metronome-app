@@ -1011,7 +1011,97 @@ function populateRecogLangs() {
   else if (loose) el.vcLang.value = loose[0];
 }
 
+/* =========================================================================
+ * Native speech recognition (Capacitor) — far better recognition (echo
+ * cancellation, gain, on-device) in the packaged app. In a plain browser this
+ * stays inactive and the Web Speech API path below runs unchanged.
+ * ========================================================================= */
+const CAP = window.Capacitor;
+const IS_NATIVE = !!(CAP && CAP.isNativePlatform && CAP.isNativePlatform());
+let NativeSR = null;
+if (IS_NATIVE && typeof CAP.registerPlugin === "function") {
+  try {
+    NativeSR = CAP.registerPlugin("SpeechRecognition");
+  } catch (_) {
+    NativeSR = null;
+  }
+}
+let nativeWired = false;
+let lastNativePartial = "";
+
+/** Immediate reaction to the two idempotent transport commands (shared by the
+ *  web interim path and the native partial-results path). */
+function handleInterim(raw) {
+  const t = raw.toLowerCase();
+  if (matchAny(t, KEYWORDS.stop)) {
+    if (state.isPlaying) {
+      stop();
+      el.vcHeard.textContent = "“" + raw.trim() + "”";
+      flashCmd("Stop");
+    }
+  } else if (matchAny(t, KEYWORDS.play)) {
+    if (!state.isPlaying) {
+      start();
+      el.vcHeard.textContent = "“" + raw.trim() + "”";
+      flashCmd("Play");
+    }
+  }
+}
+
+function nativeStartOnce() {
+  if (!NativeSR) return;
+  NativeSR.start({
+    language: el.vcLang.value,
+    maxResults: 2,
+    partialResults: true,
+    popup: false,
+  }).catch(() => {});
+}
+
+async function startNative() {
+  try {
+    await NativeSR.requestPermissions();
+    if (!nativeWired) {
+      nativeWired = true;
+      NativeSR.addListener("partialResults", (d) => {
+        const m = d && d.matches;
+        if (m && m.length) {
+          lastNativePartial = m[0];
+          el.vcHeard.textContent = "“" + m[0].trim() + "”";
+          handleInterim(m[0]);
+        }
+      });
+      NativeSR.addListener("listeningState", (d) => {
+        if (d && d.status === "stopped") {
+          if (lastNativePartial) {
+            handleTranscript(lastNativePartial);
+            lastNativePartial = "";
+          }
+          if (listening && !tunerActive) nativeStartOnce();
+        }
+      });
+    }
+    listening = true;
+    setMicUI(true);
+    nativeStartOnce();
+  } catch (_) {
+    // Native path failed — fall back to the Web Speech API.
+    NativeSR = null;
+    initRecognition();
+    startListening();
+  }
+}
+
+async function stopNative() {
+  listening = false;
+  try {
+    await NativeSR.stop();
+  } catch (_) {}
+  setMicUI(false);
+}
+
 function initRecognition() {
+  if (NativeSR) return; // native handles recognition
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) {
     el.micBtn.disabled = true;
@@ -1033,22 +1123,7 @@ function initRecognition() {
       handleTranscript(raw);
       return;
     }
-    // Fast path on interim for the two idempotent transport commands, so
-    // "stop"/"play" respond immediately. Guards make repeats harmless.
-    const t = raw.toLowerCase();
-    if (matchAny(t, KEYWORDS.stop)) {
-      if (state.isPlaying) {
-        stop();
-        el.vcHeard.textContent = "“" + raw.trim() + "”";
-        flashCmd("Stop");
-      }
-    } else if (matchAny(t, KEYWORDS.play)) {
-      if (!state.isPlaying) {
-        start();
-        el.vcHeard.textContent = "“" + raw.trim() + "”";
-        flashCmd("Play");
-      }
-    }
+    handleInterim(raw); // fast path for stop/play on partial results
   };
   recognition.onerror = (e) => {
     if (e.error === "not-allowed" || e.error === "service-not-allowed") {
@@ -1077,6 +1152,10 @@ function setMicUI(on) {
   else if (!el.vcHeard.querySelector(".vc-unsupported")) el.vcHeard.textContent = "Mic off";
 }
 function startListening() {
+  if (NativeSR) {
+    startNative();
+    return;
+  }
   if (!recognition) return;
   ensureAudio();
   recognition.lang = el.vcLang.value;
@@ -1087,6 +1166,10 @@ function startListening() {
   setMicUI(true);
 }
 function stopListening() {
+  if (NativeSR) {
+    stopNative();
+    return;
+  }
   listening = false;
   if (recognition) recognition.stop();
   setMicUI(false);
@@ -1162,7 +1245,9 @@ el.volSlider.addEventListener("input", (e) => {
 el.tapBtn.addEventListener("click", tap);
 el.micBtn.addEventListener("click", toggleListening);
 el.vcLang.addEventListener("change", () => {
-  if (listening && recognition) recognition.stop();
+  if (!listening) return;
+  if (NativeSR) NativeSR.stop().catch(() => {}); // listeningState restarts with the new lang
+  else if (recognition) recognition.stop();
 });
 el.voiceToggle.addEventListener("click", () => {
   const collapsed = el.voicePanel.classList.toggle("collapsed");
