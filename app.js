@@ -1528,9 +1528,20 @@ async function startTuner() {
       audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
     });
     const src = audioCtx.createMediaStreamSource(tunerStream);
+    // Phone mics carry a lot of sub-audible rumble/DC that hijacks the
+    // autocorrelation (it locks onto a huge lag → no valid pitch). A high-pass
+    // clears it; a gentle low-pass tames hiss above the instrument range.
+    const hp = audioCtx.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = 60;
+    const lp = audioCtx.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.value = 2000;
     tunerAnalyser = audioCtx.createAnalyser();
     tunerAnalyser.fftSize = 2048;
-    src.connect(tunerAnalyser);
+    src.connect(hp);
+    hp.connect(lp);
+    lp.connect(tunerAnalyser);
     tunerBuf = new Float32Array(tunerAnalyser.fftSize);
     tunerActive = true;
     el.tunerToggle.textContent = "Stop Tuner";
