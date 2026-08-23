@@ -1521,10 +1521,50 @@ function highlightString(targetMidi, inTune) {
  * link earns commission on a purchase; until then the links still work with no
  * tag. Swap amzn() for another store's affiliate URL scheme if you prefer.
  * ========================================================================= */
-const AFFILIATE_TAG = ""; // ← your Amazon Associates AU tag, e.g. "yourname-22"
+// Per-marketplace Amazon domains + your Associates tag for each. Fill in the
+// tags for the marketplaces you've joined (each Amazon country is a separate
+// Associates account); a blank tag still links, just without commission.
+const AMAZON = {
+  AU: { host: "amazon.com.au", tag: "" },
+  US: { host: "amazon.com", tag: "" },
+  GB: { host: "amazon.co.uk", tag: "" },
+  CA: { host: "amazon.ca", tag: "" },
+  DE: { host: "amazon.de", tag: "" },
+  FR: { host: "amazon.fr", tag: "" },
+  IT: { host: "amazon.it", tag: "" },
+  ES: { host: "amazon.es", tag: "" },
+  JP: { host: "amazon.co.jp", tag: "" },
+  IN: { host: "amazon.in", tag: "" },
+  NL: { host: "amazon.nl", tag: "" },
+  SG: { host: "amazon.sg", tag: "" },
+};
+const AMAZON_DEFAULT = "US"; // fallback marketplace when region is unknown
+
+/** Best-effort country from timezone (strongest location signal) then locale. */
+function detectCountry() {
+  let cc = null;
+  const m = (navigator.language || "").match(/[-_]([A-Za-z]{2})\b/);
+  if (m) cc = m[1].toUpperCase();
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+    if (tz.startsWith("Australia/")) cc = "AU";
+    else if (tz === "Europe/London") cc = "GB";
+    else if (tz === "Asia/Tokyo") cc = "JP";
+    else if (tz === "Asia/Kolkata") cc = "IN";
+    else if (tz === "Asia/Singapore") cc = "SG";
+    else if (["Europe/Berlin", "Europe/Amsterdam", "Europe/Paris", "Europe/Madrid", "Europe/Rome"].includes(tz)) {
+      cc = { "Europe/Berlin": "DE", "Europe/Amsterdam": "NL", "Europe/Paris": "FR", "Europe/Madrid": "ES", "Europe/Rome": "IT" }[tz];
+    } else if (tz === "America/Toronto" || tz === "America/Vancouver" || tz === "America/Edmonton") cc = "CA";
+    else if (/^America\/(New_York|Chicago|Denver|Los_Angeles|Phoenix|Anchorage|Detroit|Boise|Indiana)/.test(tz)) cc = "US";
+  } catch (_) {}
+  return cc && AMAZON[cc] ? cc : AMAZON_DEFAULT;
+}
+const AMAZON_CC = detectCountry();
+
 function amzn(query) {
-  const tag = AFFILIATE_TAG ? "&tag=" + encodeURIComponent(AFFILIATE_TAG) : "";
-  return "https://www.amazon.com.au/s?k=" + encodeURIComponent(query) + tag;
+  const store = AMAZON[AMAZON_CC] || AMAZON[AMAZON_DEFAULT];
+  const tag = store.tag ? "&tag=" + encodeURIComponent(store.tag) : "";
+  return "https://www." + store.host + "/s?k=" + encodeURIComponent(query) + tag;
 }
 const GEAR = {
   default: [["Metronome", "metronome"], ["Music stand", "sheet music stand"], ["Clip tuner", "clip on tuner"], ["Earplugs", "musician earplugs"]],
