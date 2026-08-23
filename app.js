@@ -172,6 +172,8 @@ const el = {
   tunerCents: document.getElementById("tunerCents"),
   tunerNeedle: document.getElementById("tunerNeedle"),
   tunerToggle: document.getElementById("tunerToggle"),
+  tunerRef: document.getElementById("tunerRef"),
+  tunerToneBtn: document.getElementById("tunerToneBtn"),
   voicePanel: document.getElementById("voicePanel"),
   voiceToggle: document.getElementById("voiceToggle"),
   micBtn: document.getElementById("micBtn"),
@@ -1449,7 +1451,41 @@ const INSTRUMENTS = {
   cello: [36, 43, 50, 57],          // C2 G2 D3 A3
 };
 let tunerStrings = null; // active string MIDI list, or null = chromatic
+let tunerRefA = 441;     // reference pitch for A4 (Hz)
 const midiName = (m) => NOTE_NAMES[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1);
+
+// Reference A tone generator (tune by ear).
+let toneOsc = null;
+let toneGain = null;
+function startTone() {
+  ensureAudio();
+  stopTone();
+  toneOsc = audioCtx.createOscillator();
+  toneGain = audioCtx.createGain();
+  toneOsc.type = "sine";
+  toneOsc.frequency.value = tunerRefA; // A4
+  toneGain.gain.value = 0.0001;
+  toneOsc.connect(toneGain);
+  toneGain.connect(audioCtx.destination);
+  toneOsc.start();
+  toneGain.gain.exponentialRampToValueAtTime(0.22, audioCtx.currentTime + 0.03);
+  el.tunerToneBtn.textContent = "■ Stop A";
+  el.tunerToneBtn.classList.add("playing");
+}
+function stopTone() {
+  if (!toneOsc) return;
+  try {
+    toneGain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.05);
+    toneOsc.stop(audioCtx.currentTime + 0.07);
+  } catch (_) {}
+  toneOsc = null;
+  toneGain = null;
+  el.tunerToneBtn.textContent = "♪ Play A";
+  el.tunerToneBtn.classList.remove("playing");
+}
+function toggleTone() {
+  toneOsc ? stopTone() : startTone();
+}
 
 function setInstrument(key) {
   tunerStrings = INSTRUMENTS[key] || null;
@@ -1551,7 +1587,7 @@ function setNeedle(cents) {
 }
 
 function updateTunerDisplay(freq) {
-  const noteNum = 12 * Math.log2(freq / 440) + 69;
+  const noteNum = 12 * Math.log2(freq / tunerRefA) + 69;
   // In instrument mode, snap to the nearest open string; else nearest semitone.
   const target = tunerStrings
     ? tunerStrings.reduce((best, m) =>
@@ -1691,6 +1727,7 @@ function showView(name) {
     startTuner();
   } else {
     stopTuner();
+    stopTone();
     startListening(); // resume hands-free control on the metronome
   }
 }
@@ -1703,6 +1740,12 @@ el.tunerInstrument.addEventListener("change", () => {
   if (tunerActive) showTunerIdle();
 });
 setInstrument(el.tunerInstrument.value); // initialize (chromatic by default)
+el.tunerToneBtn.addEventListener("click", toggleTone);
+el.tunerRef.addEventListener("change", () => {
+  tunerRefA = Number(el.tunerRef.value) || 441;
+  if (toneOsc) toneOsc.frequency.setValueAtTime(tunerRefA, audioCtx.currentTime);
+});
+tunerRefA = Number(el.tunerRef.value) || 441; // initialize (441 default)
 
 // --- Init ---
 buildBeats();

@@ -530,6 +530,38 @@ kbd {
 .tuner-chip.active { color: var(--text); border-color: var(--beat-accent); background: rgba(255, 255, 255, 0.06); }
 .tuner-chip.in-tune { color: #06110b; background: #43e08a; border-color: #43e08a; }
 
+/* Reference pitch + A-tone generator */
+.tuner-ref-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.tuner-ref-label { color: var(--muted); font-size: 13px; }
+.tuner-ref-select {
+  background: var(--beat);
+  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 9px;
+  padding: 8px 10px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.tuner-ref-select:focus { outline: none; border-color: var(--accent); }
+.tuner-tone-btn {
+  flex: 1;
+  max-width: 150px;
+  background: var(--beat);
+  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.tuner-tone-btn.playing {
+  background: var(--beat-accent);
+  border-color: var(--beat-accent);
+  color: #06110b;
+}
+
 /* Tap tempo button (full width, compact) */
 .tap-btn { display: block; width: 100%; margin: 2px 0 4px; }
 

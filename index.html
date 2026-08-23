@@ -143,6 +143,19 @@
         <div class="tuner-freq" id="tunerFreq">Tap Start Tuner</div>
         <div class="tuner-strings" id="tunerStrings" hidden></div>
         <button id="tunerToggle" class="btn btn-primary btn-block">Start Tuner</button>
+        <div class="tuner-ref-row">
+          <label class="tuner-ref-label" for="tunerRef">Ref A</label>
+          <select id="tunerRef" class="tuner-ref-select" aria-label="Reference pitch">
+            <option value="438">438</option>
+            <option value="439">439</option>
+            <option value="440">440</option>
+            <option value="441" selected>441</option>
+            <option value="442">442</option>
+            <option value="443">443</option>
+            <option value="444">444</option>
+          </select>
+          <button id="tunerToneBtn" class="btn tuner-tone-btn">♪ Play A</button>
+        </div>
       </div>
     </section>
   </main>
