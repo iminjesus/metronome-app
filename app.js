@@ -1110,17 +1110,23 @@ function nativeStartOnce() {
         el.vcHeard.textContent = "“" + m[0].trim() + "”";
         handleTranscript(m[0]);
       }
-      if (listening && !tunerActive) setTimeout(nativeStartOnce, 200);
+      if (listening && !tunerActive) setTimeout(nativeStartOnce, 400);
     })
     .catch((e) => {
       nativeStarting = false;
       nativeEventCount++;
-      // NO_MATCH / SPEECH_TIMEOUT during silence are expected — just re-listen.
-      // Surface anything unusual so a genuine failure is still visible.
       const msg = errText(e);
-      if (!/no match|timeout|no speech|didn'?t understand|7|6/i.test(msg))
+      // The recognizer wasn't released yet — free it and back off longer.
+      if (/busy/i.test(msg)) {
+        try { NativeSR.stop(); } catch (_) {}
+        if (listening && !tunerActive) setTimeout(nativeStartOnce, 800);
+        return;
+      }
+      // NO_MATCH / SPEECH_TIMEOUT during silence are expected — just re-listen.
+      // Surface anything genuinely unusual.
+      if (!/no match|timeout|no speech|didn'?t understand|client/i.test(msg))
         diag("STT: " + msg);
-      if (listening && !tunerActive) setTimeout(nativeStartOnce, 350);
+      if (listening && !tunerActive) setTimeout(nativeStartOnce, 450);
     });
 }
 
@@ -1174,14 +1180,9 @@ async function startNative() {
       });
       NativeSR.addListener("listeningState", (d) => {
         nativeEventCount++;
-        if (d && d.status === "stopped") {
-          if (lastNativePartial) {
-            handleTranscript(lastNativePartial);
-            lastNativePartial = "";
-          }
-          nativeStarting = false;
-          if (listening && !tunerActive) setTimeout(nativeStartOnce, 120);
-        }
+        // Re-arming is driven solely by the start() promise loop; doing it here
+        // too caused overlapping sessions → RECOGNIZER_BUSY. Observe only.
+        void d;
       });
     }
     listening = true;
