@@ -1050,13 +1050,9 @@ let lastNativePartial = "";
 let nativePermNote = "";
 let nativeEventCount = 0;
 
-/** On-screen diagnostics — the device console isn't visible to us, so surface
- *  native availability / permission / error state right in the Voice panel.
- *  Wrapped in .vc-unsupported so setMicUI() won't clobber it with "Mic off". */
+/** Developer diagnostics → console only (kept off the UI so users never see
+ *  "granted"/permission internals). */
 function diag(msg) {
-  if (el.vcHeard)
-    el.vcHeard.innerHTML =
-      '<span class="vc-unsupported">' + String(msg).replace(/</g, "&lt;") + "</span>";
   try { console.log("[voice] " + msg); } catch (_) {}
 }
 const PLATFORM = (CAP && CAP.getPlatform && CAP.getPlatform()) || "web";
@@ -1140,22 +1136,27 @@ function nativeStartOnce() {
     });
 }
 
-/** Last-resort liveness net: ONLY if start() truly hangs (no resolve/reject for
- *  a long time) do we kick it. The threshold is well beyond Android's silence
- *  timeout so a normal, healthy silent session is never interrupted — the
- *  earlier 2.2s value was cutting live sessions and causing multi-second gaps. */
+/** Self-heal net. Android's SpeechRecognizer wedges after a number of
+ *  start/stop cycles: start() then hangs forever (nativeStarting stuck true) and
+ *  no result/error ever comes — the "works ~10 times then dies" symptom. A
+ *  manual language switch revived it because it calls stop(), which forces the
+ *  hung session to release. So: if the engine has been silent past Android's
+ *  normal silence timeout, force stop() (even mid-"starting") and restart fresh.
+ *  Crucially this does NOT bail on nativeStarting — that guard is exactly what
+ *  let a wedged session sit dead. */
 function ensureNativeWatchdog() {
   if (nativeWatchdog) return;
   nativeWatchdog = setInterval(() => {
-    if (!listening || tunerActive || nativeStarting) return;
-    if (Date.now() - lastNativeActivity > 9000) {
+    if (!listening || tunerActive) return;
+    if (Date.now() - lastNativeActivity > 7000) {
+      nativeBump(); // reset timer so we don't hammer while it recovers
+      nativeStarting = false;
       try { NativeSR.stop(); } catch (_) {}
-      nativeBump();
       setTimeout(() => {
         if (listening && !tunerActive && !nativeStarting) nativeStartOnce();
-      }, 250);
+      }, 400);
     }
-  }, 3000);
+  }, 2000);
 }
 
 async function startNative() {
