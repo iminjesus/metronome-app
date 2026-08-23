@@ -159,7 +159,13 @@ const el = {
   tabMetronome: document.getElementById("tabMetronome"),
   tabTuner: document.getElementById("tabTuner"),
   // Tuner
+  tunerGauge: document.getElementById("tunerGauge"),
+  tunerTicks: document.getElementById("tunerTicks"),
   tunerNote: document.getElementById("tunerNote"),
+  tunerNoteWrap: document.getElementById("tunerNoteWrap"),
+  tunerOct: document.getElementById("tunerOct"),
+  tunerPrev: document.getElementById("tunerPrev"),
+  tunerNext: document.getElementById("tunerNext"),
   tunerFreq: document.getElementById("tunerFreq"),
   tunerCents: document.getElementById("tunerCents"),
   tunerNeedle: document.getElementById("tunerNeedle"),
@@ -1431,12 +1437,14 @@ let tunerBuf = null;
 let tunerRAF = null;
 let tunerActive = false;
 
+/** Returns { freq, clarity } — clarity is the autocorrelation peak relative to
+ *  the signal's own energy (0..1). Low clarity = noise, not a real pitch. */
 function autoCorrelate(buf, sampleRate) {
   const SIZE = buf.length;
   let rms = 0;
   for (let i = 0; i < SIZE; i++) rms += buf[i] * buf[i];
   rms = Math.sqrt(rms / SIZE);
-  if (rms < 0.006) return -1; // too quiet
+  if (rms < 0.006) return { freq: -1, clarity: 0 }; // too quiet
 
   let r1 = 0;
   let r2 = SIZE - 1;
@@ -1460,7 +1468,9 @@ function autoCorrelate(buf, sampleRate) {
     if (c[i] > maxval) { maxval = c[i]; maxpos = i; }
   }
   let T0 = maxpos;
-  if (T0 <= 0) return -1;
+  if (T0 <= 0) return { freq: -1, clarity: 0 };
+
+  const clarity = c[0] > 0 ? maxval / c[0] : 0;
 
   const x1 = c[T0 - 1] || 0;
   const x2 = c[T0];
@@ -1470,7 +1480,34 @@ function autoCorrelate(buf, sampleRate) {
   if (a) T0 = T0 - bb / (2 * a);
 
   const freq = sampleRate / T0;
-  return freq > 25 && freq < 4500 ? freq : -1;
+  return { freq: freq > 25 && freq < 4500 ? freq : -1, clarity };
+}
+
+/** Build the gauge tick marks once (−50..+50 cents across a 110° arc). */
+function buildTunerGauge() {
+  if (!el.tunerTicks || el.tunerTicks.childNodes.length) return;
+  const cx = 100, cy = 108, rOuter = 84, ns = "http://www.w3.org/2000/svg";
+  for (let cent = -50; cent <= 50; cent += 5) {
+    const major = cent % 25 === 0;
+    const ang = (cent / 50) * 55 * (Math.PI / 180); // radians from vertical
+    const len = major ? 14 : 8;
+    const x1 = cx + Math.sin(ang) * rOuter;
+    const y1 = cy - Math.cos(ang) * rOuter;
+    const x2 = cx + Math.sin(ang) * (rOuter - len);
+    const y2 = cy - Math.cos(ang) * (rOuter - len);
+    const line = document.createElementNS(ns, "line");
+    line.setAttribute("x1", x1.toFixed(1));
+    line.setAttribute("y1", y1.toFixed(1));
+    line.setAttribute("x2", x2.toFixed(1));
+    line.setAttribute("y2", y2.toFixed(1));
+    line.setAttribute("class", "tuner-tick" + (cent === 0 ? " zero" : major ? " major" : ""));
+    el.tunerTicks.appendChild(line);
+  }
+}
+
+function setNeedle(cents) {
+  const ang = (Math.max(-50, Math.min(50, cents)) / 50) * 55;
+  el.tunerNeedle.setAttribute("transform", "rotate(" + ang.toFixed(1) + " 100 108)");
 }
 
 function updateTunerDisplay(freq) {
@@ -1481,31 +1518,48 @@ function updateTunerDisplay(freq) {
   const octave = Math.floor(rounded / 12) - 1;
   const inTune = Math.abs(cents) <= 5;
 
-  el.tunerNote.textContent = name + octave;
+  el.tunerNote.textContent = name;
+  el.tunerOct.textContent = octave;
+  el.tunerPrev.textContent = NOTE_NAMES[(((rounded - 1) % 12) + 12) % 12];
+  el.tunerNext.textContent = NOTE_NAMES[(((rounded + 1) % 12) + 12) % 12];
   el.tunerFreq.textContent = freq.toFixed(1) + " Hz";
-  el.tunerCents.textContent = (cents > 0 ? "+" : "") + cents + " ¢";
-  el.tunerNeedle.style.left = 50 + Math.max(-50, Math.min(50, cents)) + "%";
-  el.tunerNote.classList.toggle("in-tune", inTune);
-  el.tunerNeedle.classList.toggle("in-tune", inTune);
+  el.tunerCents.textContent = (cents > 0 ? "+" : "") + cents + "¢";
+  setNeedle(cents);
+  el.tunerGauge.classList.toggle("in-tune", inTune);
 }
+
+function showTunerIdle() {
+  el.tunerNote.textContent = "–";
+  el.tunerOct.textContent = "";
+  el.tunerPrev.textContent = "";
+  el.tunerNext.textContent = "";
+  el.tunerCents.textContent = "–";
+  el.tunerFreq.textContent = "Listening…";
+  setNeedle(0);
+  el.tunerGauge.classList.remove("in-tune");
+}
+
+// Detection smoothing / note-hold so the readout doesn't flicker.
+let tunerSmoothed = 0;
+let tunerLastGood = 0;
+const TUNER_CLARITY = 0.55;   // below this = noise, ignore
+const TUNER_HOLD_MS = 700;    // keep the last note through brief dropouts
 
 function tunerLoop() {
   if (!tunerActive || !tunerAnalyser) return;
   tunerAnalyser.getFloatTimeDomainData(tunerBuf);
-  const freq = autoCorrelate(tunerBuf, audioCtx.sampleRate);
-  if (freq > 0) {
-    updateTunerDisplay(freq);
-  } else {
-    // Diagnostic: show the live mic level + audio state so a silent stream is
-    // distinguishable from a detection miss.
-    let rms = 0;
-    for (let i = 0; i < tunerBuf.length; i++) rms += tunerBuf[i] * tunerBuf[i];
-    rms = Math.sqrt(rms / tunerBuf.length);
-    const trk = tunerStream && tunerStream.getAudioTracks && tunerStream.getAudioTracks()[0];
-    const trkState = trk ? trk.readyState + (trk.muted ? "/muted" : "") : "none";
-    el.tunerFreq.textContent =
-      "lvl " + rms.toFixed(4) + " · ctx " + audioCtx.state + " · mic " + trkState;
-    el.tunerNote.classList.remove("in-tune");
+  const { freq, clarity } = autoCorrelate(tunerBuf, audioCtx.sampleRate);
+  const now = performance.now();
+  if (freq > 0 && clarity >= TUNER_CLARITY) {
+    // Snap on a real note change (>60 cents); otherwise glide for stability.
+    if (!tunerSmoothed || Math.abs(1200 * Math.log2(freq / tunerSmoothed)) > 60)
+      tunerSmoothed = freq;
+    else tunerSmoothed = tunerSmoothed * 0.78 + freq * 0.22;
+    tunerLastGood = now;
+    updateTunerDisplay(tunerSmoothed);
+  } else if (now - tunerLastGood > TUNER_HOLD_MS) {
+    tunerSmoothed = 0;
+    showTunerIdle();
   }
   tunerRAF = requestAnimationFrame(tunerLoop);
 }
@@ -1544,9 +1598,12 @@ async function startTuner() {
     lp.connect(tunerAnalyser);
     tunerBuf = new Float32Array(tunerAnalyser.fftSize);
     tunerActive = true;
+    tunerSmoothed = 0;
+    tunerLastGood = 0;
+    buildTunerGauge();
     el.tunerToggle.textContent = "Stop Tuner";
     el.tunerToggle.classList.add("playing");
-    el.tunerFreq.textContent = "Listening…";
+    showTunerIdle();
     tunerLoop();
   } catch (e) {
     tunerActive = false;

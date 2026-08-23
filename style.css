@@ -426,67 +426,76 @@ kbd {
 
 /* ===== Tuner ===== */
 .tuner { text-align: center; padding: 6px 0 4px; }
-.tuner-note {
-  font-size: 92px;
+
+/* Semicircular gauge */
+.tuner-arc { position: relative; margin: 4px auto 0; max-width: 340px; }
+.tuner-svg { display: block; width: 100%; height: auto; overflow: visible; }
+.tuner-tick { stroke: rgba(255, 255, 255, 0.28); stroke-width: 2; stroke-linecap: round; }
+.tuner-tick.major { stroke: rgba(255, 255, 255, 0.5); stroke-width: 2.5; }
+.tuner-tick.zero { stroke: #43e08a; stroke-width: 3; }
+.tuner-needle {
+  stroke: var(--beat-accent);
+  stroke-width: 4;
+  stroke-linecap: round;
+  transform-origin: 100px 108px;
+  transition: transform 0.09s ease-out;
+  filter: drop-shadow(0 0 5px var(--beat-accent));
+}
+.tuner-pivot { fill: var(--beat-accent); }
+.tuner-gauge.in-tune .tuner-needle { stroke: #43e08a; filter: drop-shadow(0 0 7px #43e08a); }
+.tuner-gauge.in-tune .tuner-pivot { fill: #43e08a; }
+
+/* Cents readout, floated in the gauge */
+.tuner-cents {
+  position: absolute;
+  left: 50%;
+  bottom: 4px;
+  transform: translateX(-50%);
+  font-size: 22px;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  min-height: 24px;
+}
+.tuner-gauge.in-tune .tuner-cents { color: #43e08a; }
+
+/* Note row: big current note flanked by neighbours */
+.tuner-note-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 22px;
+  margin: 2px 0 0;
+}
+.tuner-side {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--muted);
+  opacity: 0.5;
+  min-width: 26px;
+}
+.tuner-note {
+  font-size: 88px;
+  font-weight: 800;
   line-height: 1;
   letter-spacing: -0.02em;
   color: var(--text);
-  min-height: 92px;
+  min-width: 96px;
 }
-.tuner-note.in-tune { color: #43e08a; text-shadow: 0 0 26px rgba(67, 224, 138, 0.5); }
+.tuner-oct {
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--muted);
+  vertical-align: baseline;
+  bottom: 0;
+}
+.tuner-gauge.in-tune .tuner-note { color: #43e08a; text-shadow: 0 0 26px rgba(67, 224, 138, 0.5); }
 .tuner-freq {
   color: var(--muted);
   font-size: 15px;
   font-variant-numeric: tabular-nums;
-  margin: 6px 0 22px;
+  margin: 8px 0 18px;
   min-height: 18px;
-}
-.tuner-meter {
-  position: relative;
-  height: 74px;
-  background: linear-gradient(180deg, #14171e, #0e1015);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 12px;
-  overflow: hidden;
-}
-.tuner-center {
-  position: absolute;
-  top: 8px;
-  bottom: 8px;
-  left: 50%;
-  width: 2px;
-  margin-left: -1px;
-  background: rgba(67, 224, 138, 0.55);
-}
-.tuner-needle {
-  position: absolute;
-  top: 6px;
-  bottom: 6px;
-  left: 50%;
-  width: 4px;
-  margin-left: -2px;
-  border-radius: 2px;
-  background: var(--beat-accent);
-  box-shadow: 0 0 12px var(--beat-accent);
-  transition: left 0.08s ease;
-}
-.tuner-needle.in-tune { background: #43e08a; box-shadow: 0 0 14px #43e08a; }
-.tuner-scale {
-  display: flex;
-  justify-content: space-between;
-  color: var(--muted);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-  margin: 6px 4px 0;
-}
-.tuner-cents {
-  font-size: 20px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  color: var(--muted);
-  margin: 14px 0 18px;
-  min-height: 24px;
 }
 
 /* Tap tempo button (full width, compact) */
