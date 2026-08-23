@@ -175,6 +175,8 @@ const el = {
   tunerRef: document.getElementById("tunerRef"),
   tunerToneBtn: document.getElementById("tunerToneBtn"),
   gearAds: document.getElementById("gearAds"),
+  presetList: document.getElementById("presetList"),
+  presetSave: document.getElementById("presetSave"),
   voicePanel: document.getElementById("voicePanel"),
   voiceToggle: document.getElementById("voiceToggle"),
   micBtn: document.getElementById("micBtn"),
@@ -1575,7 +1577,12 @@ const GEAR = {
   viola: [["Rosin", "viola rosin"], ["Shoulder rest", "viola shoulder rest"], ["Strings", "viola strings"], ["Case", "viola case"]],
   cello: [["Rosin", "cello rosin"], ["Strings", "cello strings"], ["Endpin stop", "cello endpin stopper"], ["Bow", "cello bow"]],
 };
+const SHOW_GEAR = false; // affiliate strip off for the newsletter launch
 function renderGear(key) {
+  if (!SHOW_GEAR) {
+    el.gearAds.hidden = true;
+    return;
+  }
   const items = GEAR[key] || GEAR.default;
   el.gearAds.innerHTML =
     '<span class="gear-tag">Ad</span>' +
@@ -1821,6 +1828,77 @@ el.tunerRef.addEventListener("change", () => {
   if (toneOsc) toneOsc.frequency.setValueAtTime(tunerRefA, audioCtx.currentTime);
 });
 tunerRefA = Number(el.tunerRef.value) || 441; // initialize (441 default)
+
+/* =========================================================================
+ * Practice presets — save the current tempo/time-signature/subdivision under a
+ * name and reload it in one tap. Stored locally (no account, works offline).
+ * ========================================================================= */
+const PRESETS_KEY = "metro_presets_v1";
+function loadPresets() {
+  try { return JSON.parse(localStorage.getItem(PRESETS_KEY)) || []; } catch (_) { return []; }
+}
+function persistPresets(list) {
+  try { localStorage.setItem(PRESETS_KEY, JSON.stringify(list)); } catch (_) {}
+}
+function applyPreset(p) {
+  setBpm(p.bpm);
+  setTimeSignature(p.numerator, p.denominator);
+  setSubdiv(p.subdiv || 1);
+}
+function addPreset() {
+  const label = state.bpm + " · " + state.numerator + "/" + state.denominator;
+  let name;
+  try { name = window.prompt("Name this preset (e.g. a piece or scale)", label); }
+  catch (_) { name = label; }
+  if (name === null) return; // cancelled
+  name = (name || label).trim().slice(0, 40) || label;
+  const list = loadPresets();
+  list.push({
+    name,
+    bpm: state.bpm,
+    numerator: state.numerator,
+    denominator: state.denominator,
+    subdiv: state.subdiv,
+  });
+  persistPresets(list);
+  renderPresets();
+}
+function deletePreset(i) {
+  const list = loadPresets();
+  list.splice(i, 1);
+  persistPresets(list);
+  renderPresets();
+}
+function renderPresets() {
+  const list = loadPresets();
+  el.presetList.innerHTML = "";
+  if (!list.length) {
+    const empty = document.createElement("span");
+    empty.className = "presets-empty";
+    empty.textContent = "Save the current tempo & time signature to reuse it.";
+    el.presetList.appendChild(empty);
+    return;
+  }
+  list.forEach((p, i) => {
+    const chip = document.createElement("span");
+    chip.className = "preset-chip";
+    const load = document.createElement("button");
+    load.className = "preset-load";
+    load.textContent = p.name;
+    load.title = p.bpm + " BPM · " + p.numerator + "/" + p.denominator;
+    load.addEventListener("click", () => applyPreset(p));
+    const del = document.createElement("button");
+    del.className = "preset-del";
+    del.textContent = "×";
+    del.setAttribute("aria-label", "Delete preset");
+    del.addEventListener("click", (e) => { e.stopPropagation(); deletePreset(i); });
+    chip.appendChild(load);
+    chip.appendChild(del);
+    el.presetList.appendChild(chip);
+  });
+}
+el.presetSave.addEventListener("click", addPreset);
+renderPresets();
 
 // --- Init ---
 buildBeats();

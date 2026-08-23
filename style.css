@@ -600,6 +600,66 @@ kbd {
 /* Tap tempo button (full width, compact) */
 .tap-btn { display: block; width: 100%; margin: 2px 0 4px; }
 
+/* Practice presets */
+.presets { margin: 10px 0 2px; text-align: left; }
+.presets-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.presets-head > span {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.preset-save {
+  background: var(--beat);
+  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 6px 11px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.preset-save:active { transform: scale(0.97); }
+.presets-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.presets-empty { color: var(--muted); font-size: 12.5px; opacity: 0.75; }
+.preset-chip {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.04);
+}
+.preset-load {
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 4px 6px 12px;
+  cursor: pointer;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.preset-del {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 10px 0 6px;
+  cursor: pointer;
+}
+.preset-del:hover { color: #ff6b6b; }
+
 /* Tap tempo feedback: pulse the BPM display on each tap */
 @keyframes tappulse {
   0% { transform: scale(1); }
