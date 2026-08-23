@@ -1110,7 +1110,7 @@ function nativeStartOnce() {
         el.vcHeard.textContent = "“" + m[0].trim() + "”";
         handleTranscript(m[0]);
       }
-      if (listening && !tunerActive) setTimeout(nativeStartOnce, 400);
+      if (listening && !tunerActive) setTimeout(nativeStartOnce, 150);
     })
     .catch((e) => {
       nativeStarting = false;
@@ -1119,14 +1119,14 @@ function nativeStartOnce() {
       // The recognizer wasn't released yet — free it and back off longer.
       if (/busy/i.test(msg)) {
         try { NativeSR.stop(); } catch (_) {}
-        if (listening && !tunerActive) setTimeout(nativeStartOnce, 800);
+        if (listening && !tunerActive) setTimeout(nativeStartOnce, 600);
         return;
       }
       // NO_MATCH / SPEECH_TIMEOUT during silence are expected — just re-listen.
       // Surface anything genuinely unusual.
       if (!/no match|timeout|no speech|didn'?t understand|client/i.test(msg))
         diag("STT: " + msg);
-      if (listening && !tunerActive) setTimeout(nativeStartOnce, 450);
+      if (listening && !tunerActive) setTimeout(nativeStartOnce, 200);
     });
 }
 
@@ -1188,7 +1188,12 @@ async function startNative() {
     listening = true;
     setMicUI(true);
     diag("Listening… " + nativePermNote);
-    nativeStartOnce();
+    // Clean slate before the first pass. Coming back from the tuner (which held
+    // the mic) can leave a half-open session that would otherwise wedge the
+    // restart loop (nativeStarting stuck true) — stop, then start fresh.
+    nativeStarting = false;
+    try { await NativeSR.stop(); } catch (_) {}
+    setTimeout(nativeStartOnce, 300);
     // Heartbeat: if no recognizer events arrive within a few seconds the mic
     // isn't feeding the engine (usually an OS permission the WebView didn't get).
     setTimeout(() => {
