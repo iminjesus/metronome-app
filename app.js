@@ -1019,13 +1019,32 @@ function populateRecogLangs() {
 const CAP = window.Capacitor;
 const IS_NATIVE = !!(CAP && CAP.isNativePlatform && CAP.isNativePlatform());
 let NativeSR = null;
-if (IS_NATIVE && typeof CAP.registerPlugin === "function") {
+let nativeResolveNote = "";
+
+/** Resolve the native SpeechRecognition plugin. Tries the modern
+ *  registerPlugin() proxy first, then the legacy Capacitor.Plugins map, and
+ *  is safe to call repeatedly (handles bridge/plugin load-order races). */
+function resolveNativeSR() {
+  if (NativeSR) return NativeSR;
+  if (!CAP) { nativeResolveNote = "no Capacitor"; return null; }
   try {
-    NativeSR = CAP.registerPlugin("SpeechRecognition");
-  } catch (_) {
+    if (typeof CAP.registerPlugin === "function") {
+      NativeSR = CAP.registerPlugin("SpeechRecognition");
+      nativeResolveNote = "registerPlugin";
+    } else if (CAP.Plugins && CAP.Plugins.SpeechRecognition) {
+      NativeSR = CAP.Plugins.SpeechRecognition;
+      nativeResolveNote = "Plugins map";
+    } else {
+      nativeResolveNote =
+        "regFn=" + typeof CAP.registerPlugin + " plugins=" + !!CAP.Plugins;
+    }
+  } catch (e) {
     NativeSR = null;
+    nativeResolveNote = "threw:" + (e && e.message ? e.message : e);
   }
+  return NativeSR;
 }
+resolveNativeSR();
 let nativeWired = false;
 let lastNativePartial = "";
 
@@ -1222,7 +1241,7 @@ function setMicUI(on) {
   else if (!el.vcHeard.querySelector(".vc-unsupported")) el.vcHeard.textContent = "Mic off";
 }
 function startListening() {
-  if (NativeSR) {
+  if (resolveNativeSR()) {
     startNative();
     return;
   }
@@ -1500,8 +1519,35 @@ populateRecogLangs();
 initRecognition();
 // Boot-state banner so the native/plugin wiring is visible on-device before
 // any command is spoken (harmless one-liner in a plain browser too).
-diag("platform=" + PLATFORM + " · native=" + IS_NATIVE + " · plugin=" + !!NativeSR);
+resolveNativeSR();
+diag(
+  "platform=" + PLATFORM +
+  " · native=" + IS_NATIVE +
+  " · SR=" + !!NativeSR +
+  (NativeSR ? " (" + nativeResolveNote + ")" : " · why: " + nativeResolveNote)
+);
 startListening();
+
+// The Capacitor plugin bridge can attach a beat after our scripts run. If we're
+// native but the plugin wasn't there yet, keep retrying briefly and switch over
+// to native recognition the moment it appears.
+if (IS_NATIVE && !NativeSR) {
+  let tries = 0;
+  const retry = setInterval(() => {
+    tries++;
+    if (resolveNativeSR()) {
+      clearInterval(retry);
+      if (recognition) {
+        try { recognition.stop(); } catch (_) {}
+      }
+      listening = false;
+      diag("Native plugin ready (" + nativeResolveNote + ") — switching to native");
+      startListening();
+    } else if (tries >= 25) {
+      clearInterval(retry);
+    }
+  }, 300);
+}
 
 function unlockAudioOnce() {
   ensureAudio();
