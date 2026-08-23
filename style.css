@@ -562,6 +562,44 @@ kbd {
   color: #06110b;
 }
 
+/* Contextual gear strip (affiliate) — thin, unobtrusive, at the very bottom */
+.gear {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 480px;
+  margin: 10px auto 4px;
+  padding: 7px 10px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.gear::-webkit-scrollbar { display: none; }
+.gear-tag {
+  flex: none;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+.gear-item {
+  flex: none;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--muted);
+  text-decoration: none;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+.gear-item:hover { color: var(--text); border-color: rgba(255, 255, 255, 0.14); }
+
 /* Tap tempo button (full width, compact) */
 .tap-btn { display: block; width: 100%; margin: 2px 0 4px; }
 

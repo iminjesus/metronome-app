@@ -174,6 +174,7 @@ const el = {
   tunerToggle: document.getElementById("tunerToggle"),
   tunerRef: document.getElementById("tunerRef"),
   tunerToneBtn: document.getElementById("tunerToneBtn"),
+  gearAds: document.getElementById("gearAds"),
   voicePanel: document.getElementById("voicePanel"),
   voiceToggle: document.getElementById("voiceToggle"),
   micBtn: document.getElementById("micBtn"),
@@ -1488,6 +1489,7 @@ function toggleTone() {
 }
 
 function setInstrument(key) {
+  renderGear(key);
   tunerStrings = INSTRUMENTS[key] || null;
   const chips = el.tunerStrings;
   chips.innerHTML = "";
@@ -1511,6 +1513,39 @@ function highlightString(targetMidi, inTune) {
     chip.classList.toggle("active", active);
     chip.classList.toggle("in-tune", active && inTune);
   }
+}
+
+/* =========================================================================
+ * Contextual gear recommendations (affiliate). Small strip that reflects the
+ * chosen instrument. Put your Amazon Associates tag in AFFILIATE_TAG and every
+ * link earns commission on a purchase; until then the links still work with no
+ * tag. Swap amzn() for another store's affiliate URL scheme if you prefer.
+ * ========================================================================= */
+const AFFILIATE_TAG = ""; // ← e.g. "yourname-20" (Amazon Associates)
+function amzn(query) {
+  const tag = AFFILIATE_TAG ? "&tag=" + encodeURIComponent(AFFILIATE_TAG) : "";
+  return "https://www.amazon.com/s?k=" + encodeURIComponent(query) + tag;
+}
+const GEAR = {
+  default: [["Metronome", "metronome"], ["Music stand", "sheet music stand"], ["Clip tuner", "clip on tuner"], ["Earplugs", "musician earplugs"]],
+  guitar: [["Strings", "acoustic guitar strings"], ["Capo", "guitar capo"], ["Picks", "guitar picks"], ["Stand", "guitar stand"]],
+  bass: [["Strings", "bass guitar strings"], ["Gig bag", "bass guitar gig bag"], ["Cable", "instrument cable"], ["Strap", "bass strap"]],
+  ukulele: [["Strings", "ukulele strings"], ["Case", "ukulele case"], ["Capo", "ukulele capo"], ["Strap", "ukulele strap"]],
+  violin: [["Rosin", "violin rosin"], ["Shoulder rest", "violin shoulder rest"], ["Strings", "violin strings"], ["Chin rest", "violin chin rest"]],
+  viola: [["Rosin", "viola rosin"], ["Shoulder rest", "viola shoulder rest"], ["Strings", "viola strings"], ["Case", "viola case"]],
+  cello: [["Rosin", "cello rosin"], ["Strings", "cello strings"], ["Endpin stop", "cello endpin stopper"], ["Bow", "cello bow"]],
+};
+function renderGear(key) {
+  const items = GEAR[key] || GEAR.default;
+  el.gearAds.innerHTML =
+    '<span class="gear-tag">Ad</span>' +
+    items
+      .map(
+        ([label, q]) =>
+          '<a class="gear-item" target="_blank" rel="noopener sponsored" href="' +
+          amzn(q) + '">' + label + "</a>"
+      )
+      .join("");
 }
 
 /** Returns { freq, clarity } — clarity is the autocorrelation peak relative to
