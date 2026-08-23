@@ -118,6 +118,15 @@
     <!-- ===== Tuner ===== -->
     <section id="tunerView" hidden>
       <div class="tuner" id="tunerGauge">
+        <select id="tunerInstrument" class="tuner-instrument" aria-label="Instrument">
+          <option value="chromatic">Chromatic</option>
+          <option value="guitar">Guitar · EADGBE</option>
+          <option value="bass">Bass · EADG</option>
+          <option value="ukulele">Ukulele · GCEA</option>
+          <option value="violin">Violin · GDAE</option>
+          <option value="viola">Viola · CGDA</option>
+          <option value="cello">Cello · CGDA</option>
+        </select>
         <div class="tuner-arc">
           <svg viewBox="0 0 200 120" class="tuner-svg" aria-hidden="true">
             <g id="tunerTicks"></g>
@@ -132,6 +141,7 @@
           <span class="tuner-side" id="tunerNext"></span>
         </div>
         <div class="tuner-freq" id="tunerFreq">Tap Start Tuner</div>
+        <div class="tuner-strings" id="tunerStrings" hidden></div>
         <button id="tunerToggle" class="btn btn-primary btn-block">Start Tuner</button>
       </div>
     </section>

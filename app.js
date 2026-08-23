@@ -160,6 +160,8 @@ const el = {
   tabTuner: document.getElementById("tabTuner"),
   // Tuner
   tunerGauge: document.getElementById("tunerGauge"),
+  tunerInstrument: document.getElementById("tunerInstrument"),
+  tunerStrings: document.getElementById("tunerStrings"),
   tunerTicks: document.getElementById("tunerTicks"),
   tunerNote: document.getElementById("tunerNote"),
   tunerNoteWrap: document.getElementById("tunerNoteWrap"),
@@ -1437,6 +1439,44 @@ let tunerBuf = null;
 let tunerRAF = null;
 let tunerActive = false;
 
+// Standard instrument tunings as MIDI note numbers (low → high string).
+const INSTRUMENTS = {
+  guitar: [40, 45, 50, 55, 59, 64], // E2 A2 D3 G3 B3 E4
+  bass: [28, 33, 38, 43],           // E1 A1 D2 G2
+  ukulele: [67, 60, 64, 69],        // G4 C4 E4 A4 (reentrant)
+  violin: [55, 62, 69, 76],         // G3 D4 A4 E5
+  viola: [48, 55, 62, 69],          // C3 G3 D4 A4
+  cello: [36, 43, 50, 57],          // C2 G2 D3 A3
+};
+let tunerStrings = null; // active string MIDI list, or null = chromatic
+const midiName = (m) => NOTE_NAMES[((m % 12) + 12) % 12] + (Math.floor(m / 12) - 1);
+
+function setInstrument(key) {
+  tunerStrings = INSTRUMENTS[key] || null;
+  const chips = el.tunerStrings;
+  chips.innerHTML = "";
+  if (!tunerStrings) {
+    chips.hidden = true;
+    return;
+  }
+  chips.hidden = false;
+  tunerStrings.forEach((m) => {
+    const chip = document.createElement("span");
+    chip.className = "tuner-chip";
+    chip.dataset.midi = String(m);
+    chip.textContent = midiName(m);
+    chips.appendChild(chip);
+  });
+}
+
+function highlightString(targetMidi, inTune) {
+  for (const chip of el.tunerStrings.children) {
+    const active = Number(chip.dataset.midi) === targetMidi;
+    chip.classList.toggle("active", active);
+    chip.classList.toggle("in-tune", active && inTune);
+  }
+}
+
 /** Returns { freq, clarity } — clarity is the autocorrelation peak relative to
  *  the signal's own energy (0..1). Low clarity = noise, not a real pitch. */
 function autoCorrelate(buf, sampleRate) {
@@ -1512,20 +1552,23 @@ function setNeedle(cents) {
 
 function updateTunerDisplay(freq) {
   const noteNum = 12 * Math.log2(freq / 440) + 69;
-  const rounded = Math.round(noteNum);
-  const cents = Math.round((noteNum - rounded) * 100);
-  const name = NOTE_NAMES[((rounded % 12) + 12) % 12];
-  const octave = Math.floor(rounded / 12) - 1;
+  // In instrument mode, snap to the nearest open string; else nearest semitone.
+  const target = tunerStrings
+    ? tunerStrings.reduce((best, m) =>
+        Math.abs(m - noteNum) < Math.abs(best - noteNum) ? m : best, tunerStrings[0])
+    : Math.round(noteNum);
+  const cents = Math.round((noteNum - target) * 100);
   const inTune = Math.abs(cents) <= 5;
 
-  el.tunerNote.textContent = name;
-  el.tunerOct.textContent = octave;
-  el.tunerPrev.textContent = NOTE_NAMES[(((rounded - 1) % 12) + 12) % 12];
-  el.tunerNext.textContent = NOTE_NAMES[(((rounded + 1) % 12) + 12) % 12];
+  el.tunerNote.textContent = NOTE_NAMES[((target % 12) + 12) % 12];
+  el.tunerOct.textContent = Math.floor(target / 12) - 1;
+  el.tunerPrev.textContent = NOTE_NAMES[(((target - 1) % 12) + 12) % 12];
+  el.tunerNext.textContent = NOTE_NAMES[(((target + 1) % 12) + 12) % 12];
   el.tunerFreq.textContent = freq.toFixed(1) + " Hz";
   el.tunerCents.textContent = (cents > 0 ? "+" : "") + cents + "¢";
   setNeedle(cents);
   el.tunerGauge.classList.toggle("in-tune", inTune);
+  if (tunerStrings) highlightString(target, inTune);
 }
 
 function showTunerIdle() {
@@ -1537,6 +1580,7 @@ function showTunerIdle() {
   el.tunerFreq.textContent = "Listening…";
   setNeedle(0);
   el.tunerGauge.classList.remove("in-tune");
+  if (tunerStrings) highlightString(-1, false);
 }
 
 // Detection smoothing / note-hold so the readout doesn't flicker.
@@ -1654,6 +1698,11 @@ function showView(name) {
 el.tabMetronome.addEventListener("click", () => showView("metronome"));
 el.tabTuner.addEventListener("click", () => showView("tuner"));
 el.tunerToggle.addEventListener("click", toggleTuner);
+el.tunerInstrument.addEventListener("change", () => {
+  setInstrument(el.tunerInstrument.value);
+  if (tunerActive) showTunerIdle();
+});
+setInstrument(el.tunerInstrument.value); // initialize (chromatic by default)
 
 // --- Init ---
 buildBeats();

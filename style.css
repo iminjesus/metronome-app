@@ -494,9 +494,41 @@ kbd {
   color: var(--muted);
   font-size: 15px;
   font-variant-numeric: tabular-nums;
-  margin: 8px 0 18px;
+  margin: 8px 0 14px;
   min-height: 18px;
 }
+.tuner-instrument {
+  width: 100%;
+  background: var(--beat);
+  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+.tuner-instrument:focus { outline: none; border-color: var(--accent); }
+.tuner-strings {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 16px;
+}
+.tuner-chip {
+  min-width: 40px;
+  padding: 8px 6px;
+  border-radius: 9px;
+  background: var(--beat);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+}
+.tuner-chip.active { color: var(--text); border-color: var(--beat-accent); background: rgba(255, 255, 255, 0.06); }
+.tuner-chip.in-tune { color: #06110b; background: #43e08a; border-color: #43e08a; }
 
 /* Tap tempo button (full width, compact) */
 .tap-btn { display: block; width: 100%; margin: 2px 0 4px; }
