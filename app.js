@@ -1087,33 +1087,40 @@ function handleInterim(raw) {
 
 let nativeStarting = false;
 
-/** Start one recognition pass. The plugin resolves start() with the final
- *  matches on Android; we also listen to partialResults + listeningState for
- *  low latency. Whichever fires, we re-arm while still listening. */
+/** Start one recognition pass and WAIT for the result. Android's recognizer
+ *  runs a session, then start() resolves with the final matches (or rejects on
+ *  NO_MATCH / timeout during silence). We handle the phrase, then re-arm — one
+ *  session at a time, so we never cancel a pass before it can hear anything.
+ *  (The old partialResults:true loop resolved instantly and restarted every
+ *  120ms, killing the mic before it captured a word → zero events.) */
 function nativeStartOnce() {
   if (!NativeSR || nativeStarting) return;
   nativeStarting = true;
   NativeSR.start({
     language: el.vcLang.value,
-    maxResults: 2,
-    partialResults: true,
+    maxResults: 3,
+    partialResults: false,
     popup: false,
   })
     .then((res) => {
       nativeStarting = false;
-      // Some platforms return the final matches straight from start().
+      nativeEventCount++;
       const m = res && res.matches;
       if (m && m.length) {
-        lastNativePartial = "";
+        el.vcHeard.textContent = "“" + m[0].trim() + "”";
         handleTranscript(m[0]);
       }
-      if (listening && !tunerActive) setTimeout(nativeStartOnce, 120);
+      if (listening && !tunerActive) setTimeout(nativeStartOnce, 200);
     })
     .catch((e) => {
       nativeStarting = false;
-      diag("STT error: " + errText(e));
-      // Re-arm after a short pause unless the user stopped listening.
-      if (listening && !tunerActive) setTimeout(nativeStartOnce, 700);
+      nativeEventCount++;
+      // NO_MATCH / SPEECH_TIMEOUT during silence are expected — just re-listen.
+      // Surface anything unusual so a genuine failure is still visible.
+      const msg = errText(e);
+      if (!/no match|timeout|no speech|didn'?t understand|7|6/i.test(msg))
+        diag("STT: " + msg);
+      if (listening && !tunerActive) setTimeout(nativeStartOnce, 350);
     });
 }
 
@@ -1185,9 +1192,9 @@ async function startNative() {
     // isn't feeding the engine (usually an OS permission the WebView didn't get).
     setTimeout(() => {
       if (listening && !tunerActive && nativeEventCount === 0) {
-        diag("No mic audio (0 events) → " + nativePermNote + " · check Settings ▸ Microphone");
+        diag("No recognizer events (8s) → engine not returning. " + nativePermNote);
       }
-    }, 4000);
+    }, 8000);
   } catch (e) {
     diag("Native start failed: " + errText(e));
     listening = false;
