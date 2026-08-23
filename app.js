@@ -1118,24 +1118,25 @@ function nativeStartOnce() {
         handleTranscript(m[0]);
         lastNativePartial = "";
       }
-      if (listening && !tunerActive) setTimeout(nativeStartOnce, 120);
+      // Give the recognizer time to fully release before the next session —
+      // restarting too fast is what triggers the RECOGNIZER_BUSY oscillation.
+      if (listening && !tunerActive) setTimeout(nativeStartOnce, 500);
     })
     .catch((e) => {
       nativeStarting = false;
       nativeEventCount++;
       nativeBump();
       const msg = errText(e);
-      // The recognizer wasn't released yet — free it and back off longer.
+      // Still not released — DON'T stop() (that churns it more); just wait longer.
       if (/busy/i.test(msg)) {
-        try { NativeSR.stop(); } catch (_) {}
-        if (listening && !tunerActive) setTimeout(nativeStartOnce, 500);
+        if (listening && !tunerActive) setTimeout(nativeStartOnce, 1000);
         return;
       }
       // NO_MATCH / SPEECH_TIMEOUT during silence are expected — just re-listen.
       // Surface anything genuinely unusual.
       if (!/no match|timeout|no speech|didn'?t understand|client/i.test(msg))
         diag("STT: " + msg);
-      if (listening && !tunerActive) setTimeout(nativeStartOnce, 150);
+      if (listening && !tunerActive) setTimeout(nativeStartOnce, 400);
     });
 }
 
@@ -1223,7 +1224,7 @@ async function startNative() {
     // restart loop (nativeStarting stuck true) — stop, then start fresh.
     nativeStarting = false;
     try { await NativeSR.stop(); } catch (_) {}
-    setTimeout(nativeStartOnce, 300);
+    setTimeout(nativeStartOnce, 500);
     // Heartbeat: if no recognizer events arrive within a few seconds the mic
     // isn't feeding the engine (usually an OS permission the WebView didn't get).
     setTimeout(() => {
