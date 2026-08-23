@@ -1139,22 +1139,22 @@ function nativeStartOnce() {
     });
 }
 
-/** Liveness net: if we're supposed to be listening but the engine has gone
- *  quiet (a session ended without an event we caught), kick it back to life. */
+/** Last-resort liveness net: ONLY if start() truly hangs (no resolve/reject for
+ *  a long time) do we kick it. The threshold is well beyond Android's silence
+ *  timeout so a normal, healthy silent session is never interrupted — the
+ *  earlier 2.2s value was cutting live sessions and causing multi-second gaps. */
 function ensureNativeWatchdog() {
   if (nativeWatchdog) return;
   nativeWatchdog = setInterval(() => {
     if (!listening || tunerActive || nativeStarting) return;
-    if (Date.now() - lastNativeActivity > 2200) {
-      // Gone quiet with no session in flight — release and restart cleanly so
-      // we don't collide with a lingering session (RECOGNIZER_BUSY).
-      nativeBump();
+    if (Date.now() - lastNativeActivity > 9000) {
       try { NativeSR.stop(); } catch (_) {}
+      nativeBump();
       setTimeout(() => {
         if (listening && !tunerActive && !nativeStarting) nativeStartOnce();
       }, 250);
     }
-  }, 900);
+  }, 3000);
 }
 
 async function startNative() {
