@@ -1047,6 +1047,8 @@ function resolveNativeSR() {
 resolveNativeSR();
 let nativeWired = false;
 let lastNativePartial = "";
+let nativePermNote = "";
+let nativeEventCount = 0;
 
 /** On-screen diagnostics — the device console isn't visible to us, so surface
  *  native availability / permission / error state right in the Voice panel.
@@ -1130,8 +1132,10 @@ async function startNative() {
     } catch (e) {
       diag("available() failed: " + errText(e));
     }
-    // 2) Microphone permission.
-    let perm;
+    // 2) Microphone permission — surface the raw check + request results so the
+    //    true permission state is visible on-device (not just our guess).
+    let perm, checkBefore;
+    try { checkBefore = await NativeSR.checkPermissions(); } catch (_) {}
     try {
       perm = await NativeSR.requestPermissions();
     } catch (e) {
@@ -1140,9 +1144,11 @@ async function startNative() {
       setMicUI(false);
       return;
     }
+    nativePermNote =
+      "check=" + JSON.stringify(checkBefore || null) + " req=" + JSON.stringify(perm || null);
     const granted = perm && (perm.speechRecognition === "granted" || perm.record === "granted" || perm.granted === true);
     if (perm && !granted) {
-      diag("Mic permission: " + JSON.stringify(perm) + " — enable it in Settings.");
+      diag("Mic NOT granted → " + nativePermNote + " · enable Microphone in Settings.");
       listening = false;
       setMicUI(false);
       return;
@@ -1151,6 +1157,7 @@ async function startNative() {
     if (!nativeWired) {
       nativeWired = true;
       NativeSR.addListener("partialResults", (d) => {
+        nativeEventCount++;
         const m = d && d.matches;
         if (m && m.length) {
           lastNativePartial = m[0];
@@ -1159,6 +1166,7 @@ async function startNative() {
         }
       });
       NativeSR.addListener("listeningState", (d) => {
+        nativeEventCount++;
         if (d && d.status === "stopped") {
           if (lastNativePartial) {
             handleTranscript(lastNativePartial);
@@ -1171,8 +1179,15 @@ async function startNative() {
     }
     listening = true;
     setMicUI(true);
-    diag("Listening (native)… say a command");
+    diag("Listening… " + nativePermNote);
     nativeStartOnce();
+    // Heartbeat: if no recognizer events arrive within a few seconds the mic
+    // isn't feeding the engine (usually an OS permission the WebView didn't get).
+    setTimeout(() => {
+      if (listening && !tunerActive && nativeEventCount === 0) {
+        diag("No mic audio (0 events) → " + nativePermNote + " · check Settings ▸ Microphone");
+      }
+    }, 4000);
   } catch (e) {
     diag("Native start failed: " + errText(e));
     listening = false;
@@ -1187,6 +1202,7 @@ async function stopNative() {
     await NativeSR.stop();
   } catch (_) {}
   setMicUI(false);
+  if (el.vcHeard) el.vcHeard.textContent = "Mic off"; // clear any diag banner
 }
 
 function initRecognition() {
@@ -1444,6 +1460,11 @@ function tunerLoop() {
 async function startTuner() {
   try {
     ensureAudio();
+    // In the packaged app, make sure the OS mic permission is granted before the
+    // WebView asks for it — otherwise getUserMedia is denied outright.
+    if (resolveNativeSR()) {
+      try { await NativeSR.requestPermissions(); } catch (_) {}
+    }
     tunerStream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
     });
