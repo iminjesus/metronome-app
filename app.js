@@ -1086,48 +1086,77 @@ function handleInterim(raw) {
 }
 
 let nativeStarting = false;
+let lastNativeActivity = 0;
+let nativeWatchdog = null;
+function nativeBump() {
+  lastNativeActivity = Date.now();
+}
 
-/** Start one recognition pass and WAIT for the result. Android's recognizer
- *  runs a session, then start() resolves with the final matches (or rejects on
- *  NO_MATCH / timeout during silence). We handle the phrase, then re-arm — one
- *  session at a time, so we never cancel a pass before it can hear anything.
- *  (The old partialResults:true loop resolved instantly and restarted every
- *  120ms, killing the mic before it captured a word → zero events.) */
+/** Keep recognition alive with low latency: run with partialResults so commands
+ *  are caught DURING a session (handleInterim fires instantly for stop/play),
+ *  and re-arm the moment a session ends. A watchdog re-kicks the engine if it
+ *  ever goes quiet, so a missed end-event can't wedge the loop. This fixes
+ *  "a command right after another is missed" — the dead window between the old
+ *  endpoint-and-restart sessions. */
 function nativeStartOnce() {
   if (!NativeSR || nativeStarting) return;
   nativeStarting = true;
+  nativeBump();
   NativeSR.start({
     language: el.vcLang.value,
     maxResults: 3,
-    partialResults: false,
+    partialResults: true,
     popup: false,
   })
     .then((res) => {
       nativeStarting = false;
       nativeEventCount++;
+      nativeBump();
       const m = res && res.matches;
       if (m && m.length) {
+        // A device that returns final matches from start() → handle + re-arm.
         el.vcHeard.textContent = "“" + m[0].trim() + "”";
         handleTranscript(m[0]);
+        lastNativePartial = "";
+        if (listening && !tunerActive) setTimeout(nativeStartOnce, 120);
       }
-      if (listening && !tunerActive) setTimeout(nativeStartOnce, 150);
+      // Otherwise the session is live; re-arm comes from listeningState/watchdog.
     })
     .catch((e) => {
       nativeStarting = false;
       nativeEventCount++;
+      nativeBump();
       const msg = errText(e);
       // The recognizer wasn't released yet — free it and back off longer.
       if (/busy/i.test(msg)) {
         try { NativeSR.stop(); } catch (_) {}
-        if (listening && !tunerActive) setTimeout(nativeStartOnce, 600);
+        if (listening && !tunerActive) setTimeout(nativeStartOnce, 500);
         return;
       }
       // NO_MATCH / SPEECH_TIMEOUT during silence are expected — just re-listen.
       // Surface anything genuinely unusual.
       if (!/no match|timeout|no speech|didn'?t understand|client/i.test(msg))
         diag("STT: " + msg);
-      if (listening && !tunerActive) setTimeout(nativeStartOnce, 200);
+      if (listening && !tunerActive) setTimeout(nativeStartOnce, 150);
     });
+}
+
+/** Liveness net: if we're supposed to be listening but the engine has gone
+ *  quiet (a session ended without an event we caught), kick it back to life. */
+function ensureNativeWatchdog() {
+  if (nativeWatchdog) return;
+  nativeWatchdog = setInterval(() => {
+    if (!listening || tunerActive || nativeStarting) return;
+    if (Date.now() - lastNativeActivity > 2200) {
+      // Gone quiet with no session in flight — release and restart cleanly so
+      // we don't collide with a lingering session (RECOGNIZER_BUSY).
+      nativeBump();
+      try { NativeSR.stop(); } catch (_) {}
+      setTimeout(() => {
+        if (listening && !tunerActive && !nativeStarting) nativeStartOnce();
+      }, 250);
+    }
+  }, 900);
 }
 
 async function startNative() {
@@ -1171,20 +1200,30 @@ async function startNative() {
       nativeWired = true;
       NativeSR.addListener("partialResults", (d) => {
         nativeEventCount++;
+        nativeBump();
         const m = d && d.matches;
         if (m && m.length) {
           lastNativePartial = m[0];
           el.vcHeard.textContent = "“" + m[0].trim() + "”";
-          handleInterim(m[0]);
+          handleInterim(m[0]); // instant stop/play while the session is live
         }
       });
       NativeSR.addListener("listeningState", (d) => {
         nativeEventCount++;
-        // Re-arming is driven solely by the start() promise loop; doing it here
-        // too caused overlapping sessions → RECOGNIZER_BUSY. Observe only.
-        void d;
+        nativeBump();
+        if (d && d.status === "stopped") {
+          // Session ended — commit the last partial as the final command and
+          // re-arm quickly so the next command isn't dropped in a dead window.
+          if (lastNativePartial) {
+            handleTranscript(lastNativePartial);
+            lastNativePartial = "";
+          }
+          nativeStarting = false;
+          if (listening && !tunerActive) setTimeout(nativeStartOnce, 120);
+        }
       });
     }
+    ensureNativeWatchdog();
     listening = true;
     setMicUI(true);
     diag("Listening… " + nativePermNote);
