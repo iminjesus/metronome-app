@@ -24,6 +24,12 @@
       <button class="nav-tab" id="tabTuner" data-view="tuner">Tuner</button>
     </nav>
 
+    <!-- First-visit intro (shown once, then dismissed) -->
+    <div class="intro" id="introBanner" hidden>
+      <span class="intro-text">A free practice tool for musicians — <b>voice control</b>, chromatic tuner, speed trainer &amp; presets. Try saying “start”.</span>
+      <button class="intro-close" id="introClose" aria-label="Dismiss">×</button>
+    </div>
+
     <section id="metronomeView">
     <!-- Visual beat indicator -->
     <div class="beats" id="beats" aria-hidden="true"></div>
