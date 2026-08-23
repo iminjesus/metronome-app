@@ -177,8 +177,6 @@ const el = {
   gearAds: document.getElementById("gearAds"),
   presetList: document.getElementById("presetList"),
   presetSave: document.getElementById("presetSave"),
-  introBanner: document.getElementById("introBanner"),
-  introClose: document.getElementById("introClose"),
   voicePanel: document.getElementById("voicePanel"),
   voiceToggle: document.getElementById("voiceToggle"),
   micBtn: document.getElementById("micBtn"),
@@ -1901,15 +1899,6 @@ function renderPresets() {
 }
 el.presetSave.addEventListener("click", addPreset);
 renderPresets();
-
-// First-visit intro banner (shown once).
-try {
-  if (!localStorage.getItem("intro_seen_v1")) el.introBanner.hidden = false;
-} catch (_) {}
-el.introClose.addEventListener("click", () => {
-  el.introBanner.hidden = true;
-  try { localStorage.setItem("intro_seen_v1", "1"); } catch (_) {}
-});
 
 // --- Init ---
 buildBeats();
