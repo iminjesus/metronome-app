@@ -1030,11 +1030,15 @@ let nativeWired = false;
 let lastNativePartial = "";
 
 /** On-screen diagnostics — the device console isn't visible to us, so surface
- *  native availability / permission / error state right in the Voice panel. */
+ *  native availability / permission / error state right in the Voice panel.
+ *  Wrapped in .vc-unsupported so setMicUI() won't clobber it with "Mic off". */
 function diag(msg) {
-  if (el.vcHeard) el.vcHeard.textContent = msg;
+  if (el.vcHeard)
+    el.vcHeard.innerHTML =
+      '<span class="vc-unsupported">' + String(msg).replace(/</g, "&lt;") + "</span>";
   try { console.log("[voice] " + msg); } catch (_) {}
 }
+const PLATFORM = (CAP && CAP.getPlatform && CAP.getPlatform()) || "web";
 function errText(e) {
   if (!e) return "unknown";
   if (typeof e === "string") return e;
@@ -1230,6 +1234,10 @@ function startListening() {
     recognition.start();
   } catch (_) {}
   setMicUI(true);
+  // If we're inside the packaged app but landed on the (unsupported) web
+  // recognizer, the native plugin isn't wired — surface that instead of a
+  // silent dead mic.
+  if (IS_NATIVE) diag("Web recognizer on native — plugin missing (native=" + IS_NATIVE + ")");
 }
 function stopListening() {
   if (NativeSR) {
@@ -1490,6 +1498,9 @@ loadVoices();
 if ("speechSynthesis" in window) window.speechSynthesis.onvoiceschanged = loadVoices;
 populateRecogLangs();
 initRecognition();
+// Boot-state banner so the native/plugin wiring is visible on-device before
+// any command is spoken (harmless one-liner in a plain browser too).
+diag("platform=" + PLATFORM + " · native=" + IS_NATIVE + " · plugin=" + !!NativeSR);
 startListening();
 
 function unlockAudioOnce() {
