@@ -1,5 +1,5 @@
 /* Offline cache for the app shell. Bump CACHE to ship an update. */
-const CACHE = "metronome-v2";
+const CACHE = "metronome-v3";
 const ASSETS = [
   "./",
   "./index.html",

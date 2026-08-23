@@ -1029,6 +1029,18 @@ if (IS_NATIVE && typeof CAP.registerPlugin === "function") {
 let nativeWired = false;
 let lastNativePartial = "";
 
+/** On-screen diagnostics — the device console isn't visible to us, so surface
+ *  native availability / permission / error state right in the Voice panel. */
+function diag(msg) {
+  if (el.vcHeard) el.vcHeard.textContent = msg;
+  try { console.log("[voice] " + msg); } catch (_) {}
+}
+function errText(e) {
+  if (!e) return "unknown";
+  if (typeof e === "string") return e;
+  return (e.name ? e.name + ": " : "") + (e.message || JSON.stringify(e));
+}
+
 /** Immediate reaction to the two idempotent transport commands (shared by the
  *  web interim path and the native partial-results path). */
 function handleInterim(raw) {
@@ -1048,19 +1060,71 @@ function handleInterim(raw) {
   }
 }
 
+let nativeStarting = false;
+
+/** Start one recognition pass. The plugin resolves start() with the final
+ *  matches on Android; we also listen to partialResults + listeningState for
+ *  low latency. Whichever fires, we re-arm while still listening. */
 function nativeStartOnce() {
-  if (!NativeSR) return;
+  if (!NativeSR || nativeStarting) return;
+  nativeStarting = true;
   NativeSR.start({
     language: el.vcLang.value,
     maxResults: 2,
     partialResults: true,
     popup: false,
-  }).catch(() => {});
+  })
+    .then((res) => {
+      nativeStarting = false;
+      // Some platforms return the final matches straight from start().
+      const m = res && res.matches;
+      if (m && m.length) {
+        lastNativePartial = "";
+        handleTranscript(m[0]);
+      }
+      if (listening && !tunerActive) setTimeout(nativeStartOnce, 120);
+    })
+    .catch((e) => {
+      nativeStarting = false;
+      diag("STT error: " + errText(e));
+      // Re-arm after a short pause unless the user stopped listening.
+      if (listening && !tunerActive) setTimeout(nativeStartOnce, 700);
+    });
 }
 
 async function startNative() {
   try {
-    await NativeSR.requestPermissions();
+    diag("Voice: checking native engine…");
+    // 1) Is the on-device recognizer present?
+    try {
+      const a = await NativeSR.available();
+      if (a && a.available === false) {
+        diag("No speech recognizer on this device. Install/enable Google app voice.");
+        listening = false;
+        setMicUI(false);
+        return;
+      }
+    } catch (e) {
+      diag("available() failed: " + errText(e));
+    }
+    // 2) Microphone permission.
+    let perm;
+    try {
+      perm = await NativeSR.requestPermissions();
+    } catch (e) {
+      diag("Permission request failed: " + errText(e));
+      listening = false;
+      setMicUI(false);
+      return;
+    }
+    const granted = perm && (perm.speechRecognition === "granted" || perm.record === "granted" || perm.granted === true);
+    if (perm && !granted) {
+      diag("Mic permission: " + JSON.stringify(perm) + " — enable it in Settings.");
+      listening = false;
+      setMicUI(false);
+      return;
+    }
+    // 3) Wire event listeners once.
     if (!nativeWired) {
       nativeWired = true;
       NativeSR.addListener("partialResults", (d) => {
@@ -1077,23 +1141,25 @@ async function startNative() {
             handleTranscript(lastNativePartial);
             lastNativePartial = "";
           }
-          if (listening && !tunerActive) nativeStartOnce();
+          nativeStarting = false;
+          if (listening && !tunerActive) setTimeout(nativeStartOnce, 120);
         }
       });
     }
     listening = true;
     setMicUI(true);
+    diag("Listening (native)… say a command");
     nativeStartOnce();
-  } catch (_) {
-    // Native path failed — fall back to the Web Speech API.
-    NativeSR = null;
-    initRecognition();
-    startListening();
+  } catch (e) {
+    diag("Native start failed: " + errText(e));
+    listening = false;
+    setMicUI(false);
   }
 }
 
 async function stopNative() {
   listening = false;
+  nativeStarting = false;
   try {
     await NativeSR.stop();
   } catch (_) {}
@@ -1364,12 +1430,13 @@ async function startTuner() {
     el.tunerToggle.classList.add("playing");
     el.tunerFreq.textContent = "Listening…";
     tunerLoop();
-  } catch (_) {
+  } catch (e) {
     tunerActive = false;
     el.tunerToggle.textContent = "Start Tuner";
     el.tunerNote.textContent = "–";
+    const detail = e && e.name ? e.name + (e.message ? " — " + e.message : "") : "unknown error";
     el.tunerFreq.innerHTML =
-      '<span class="vc-unsupported">Microphone access needed — tap Start.</span>';
+      '<span class="vc-unsupported">Mic blocked: ' + detail + "</span>";
   }
 }
 
