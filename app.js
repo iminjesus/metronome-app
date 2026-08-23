@@ -1521,10 +1521,10 @@ function highlightString(targetMidi, inTune) {
  * link earns commission on a purchase; until then the links still work with no
  * tag. Swap amzn() for another store's affiliate URL scheme if you prefer.
  * ========================================================================= */
-const AFFILIATE_TAG = ""; // ← e.g. "yourname-20" (Amazon Associates)
+const AFFILIATE_TAG = ""; // ← your Amazon Associates AU tag, e.g. "yourname-22"
 function amzn(query) {
   const tag = AFFILIATE_TAG ? "&tag=" + encodeURIComponent(AFFILIATE_TAG) : "";
-  return "https://www.amazon.com/s?k=" + encodeURIComponent(query) + tag;
+  return "https://www.amazon.com.au/s?k=" + encodeURIComponent(query) + tag;
 }
 const GEAR = {
   default: [["Metronome", "metronome"], ["Music stand", "sheet music stand"], ["Clip tuner", "clip on tuner"], ["Earplugs", "musician earplugs"]],

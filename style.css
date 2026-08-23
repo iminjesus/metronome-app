@@ -562,20 +562,17 @@ kbd {
   color: #06110b;
 }
 
-/* Contextual gear strip (affiliate) — thin, unobtrusive, at the very bottom */
+/* Contextual gear strip (affiliate) — thin, unobtrusive, bottom of the card */
 .gear {
   display: flex;
   align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
   gap: 7px;
-  max-width: 480px;
-  margin: 10px auto 4px;
-  padding: 7px 10px;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
+  margin: 14px 0 0;
+  padding: 12px 2px 2px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
-.gear::-webkit-scrollbar { display: none; }
 .gear-tag {
   flex: none;
   font-size: 9px;
