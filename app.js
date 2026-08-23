@@ -1436,7 +1436,7 @@ function autoCorrelate(buf, sampleRate) {
   let rms = 0;
   for (let i = 0; i < SIZE; i++) rms += buf[i] * buf[i];
   rms = Math.sqrt(rms / SIZE);
-  if (rms < 0.01) return -1; // too quiet
+  if (rms < 0.006) return -1; // too quiet
 
   let r1 = 0;
   let r2 = SIZE - 1;
@@ -1504,12 +1504,18 @@ function tunerLoop() {
 
 async function startTuner() {
   try {
-    ensureAudio();
+    tunerActive = true; // claim the mic now so the voice loop won't re-grab it
+    ensureAudio(); // resumes the AudioContext inside the tab-tap gesture
     // In the packaged app, make sure the OS mic permission is granted before the
     // WebView asks for it — otherwise getUserMedia is denied outright.
     if (resolveNativeSR()) {
       try { await NativeSR.requestPermissions(); } catch (_) {}
     }
+    // Voice recognition may have just released the mic; grabbing it in the same
+    // instant yields a silent stream (stuck on "Listening…"). Give it a beat,
+    // and make sure the context is actually running.
+    await new Promise((r) => setTimeout(r, 350));
+    if (audioCtx.state === "suspended") { try { await audioCtx.resume(); } catch (_) {} }
     tunerStream = await navigator.mediaDevices.getUserMedia({
       audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
     });
