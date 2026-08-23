@@ -1496,7 +1496,15 @@ function tunerLoop() {
   if (freq > 0) {
     updateTunerDisplay(freq);
   } else {
-    el.tunerFreq.textContent = "Listening…";
+    // Diagnostic: show the live mic level + audio state so a silent stream is
+    // distinguishable from a detection miss.
+    let rms = 0;
+    for (let i = 0; i < tunerBuf.length; i++) rms += tunerBuf[i] * tunerBuf[i];
+    rms = Math.sqrt(rms / tunerBuf.length);
+    const trk = tunerStream && tunerStream.getAudioTracks && tunerStream.getAudioTracks()[0];
+    const trkState = trk ? trk.readyState + (trk.muted ? "/muted" : "") : "none";
+    el.tunerFreq.textContent =
+      "lvl " + rms.toFixed(4) + " · ctx " + audioCtx.state + " · mic " + trkState;
     el.tunerNote.classList.remove("in-tune");
   }
   tunerRAF = requestAnimationFrame(tunerLoop);
