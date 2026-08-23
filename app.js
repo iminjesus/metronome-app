@@ -1444,7 +1444,7 @@ function autoCorrelate(buf, sampleRate) {
   let rms = 0;
   for (let i = 0; i < SIZE; i++) rms += buf[i] * buf[i];
   rms = Math.sqrt(rms / SIZE);
-  if (rms < 0.006) return { freq: -1, clarity: 0 }; // too quiet
+  if (rms < 0.004) return { freq: -1, clarity: 0 }; // too quiet
 
   let r1 = 0;
   let r2 = SIZE - 1;
@@ -1542,7 +1542,7 @@ function showTunerIdle() {
 // Detection smoothing / note-hold so the readout doesn't flicker.
 let tunerSmoothed = 0;
 let tunerLastGood = 0;
-const TUNER_CLARITY = 0.55;   // below this = noise, ignore
+const TUNER_CLARITY = 0.46;   // below this = noise, ignore
 const TUNER_HOLD_MS = 700;    // keep the last note through brief dropouts
 
 function tunerLoop() {
